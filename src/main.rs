@@ -1,5 +1,6 @@
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
+use std::str::FromStr;
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -18,8 +19,8 @@ struct Opt {
 struct Shared {
     art_data: Vec<u8>,
     current_song: String,
-    current_song_length: u64,
-    current_song_position: u64,
+    current_song_length: f64,
+    current_song_position: f64,
     thread_running: bool,
     stream: TcpStream,
     password: String,
@@ -31,8 +32,8 @@ impl Shared {
         Self {
             art_data: Vec::new(),
             current_song: String::new(),
-            current_song_length: 0,
-            current_song_position: 0,
+            current_song_length: 0.0,
+            current_song_position: 0.0,
             thread_running: true,
             stream,
             password: String::new(),
@@ -120,14 +121,22 @@ fn check_next_chars(
     }
 }
 
-fn read_line(buf: &[u8], count: usize, saved: &mut Vec<u8>) -> Result<String, (String, String)> {
+fn read_line(
+    buf: &mut Vec<u8>,
+    count: usize,
+    saved: &mut Vec<u8>,
+    init: bool,
+) -> Result<String, (String, String)> {
     let mut result = String::new();
 
     if !saved.is_empty() {
         // TODO
+        println!("TODO handle \"saved\" vec");
     }
 
     saved.clear();
+
+    let mut prev_two: Vec<char> = Vec::with_capacity(3);
 
     let mut skip_count = 0;
     for idx in 0..count {
@@ -137,7 +146,19 @@ fn read_line(buf: &[u8], count: usize, saved: &mut Vec<u8>) -> Result<String, (S
         }
         let next_char_result = check_next_chars(buf, idx, saved);
         if let Ok((c, s)) = next_char_result {
+            if !init {
+                prev_two.push(c);
+                if prev_two.len() > 2 {
+                    prev_two.remove(0);
+                }
+                if ['O', 'K'] == prev_two.as_slice() {
+                    *buf = buf.split_off(2);
+                    result = String::from("OK");
+                    return Ok(result);
+                }
+            }
             if c == '\n' {
+                *buf = buf.split_off(idx + s as usize);
                 return Ok(result);
             }
             result.push(c);
@@ -146,12 +167,15 @@ fn read_line(buf: &[u8], count: usize, saved: &mut Vec<u8>) -> Result<String, (S
             for i in 0..count {
                 saved.push(buf[idx + i as usize]);
             }
+            *buf = buf.split_off(idx);
             return Err((msg, result));
         } else {
             unreachable!();
         }
     }
 
+    *saved = buf.to_vec();
+    *buf = Vec::new();
     Err((String::from("Newline not reached"), result))
 }
 
@@ -162,6 +186,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut saved_str: String = String::new();
     let mut authenticated: bool = false;
     let mut song_title_get_time: Instant = Instant::now() - Duration::from_secs(10);
+    let mut song_pos_get_time: Instant = Instant::now() - Duration::from_secs(10);
     let mut song_length_get_time: Instant = Instant::now() - Duration::from_secs(10);
     loop {
         if !shared_data
@@ -178,44 +203,62 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
             if let Ok(mut lock) = lock_result {
                 let read_result = lock.stream.read(&mut buf);
                 if let Ok(count) = read_result {
-                    let read_line_result = read_line(&buf, count, &mut saved);
-                    if let Ok(mut line) = read_line_result {
-                        line = saved_str + &line;
-                        saved_str = String::new();
-                        if init {
-                            if line.starts_with("OK MPD ") {
-                                init = false;
-                                println!("Got initial \"OK\" from MPD");
-                            } else {
-                                return Err(String::from(
-                                    "Did not get expected init message from MPD",
-                                ));
-                            }
-                        } else {
-                            // TODO handling of other messages
-                            println!("Got response: {}", line);
-                            if line.starts_with("file: ") {
-                                lock.current_song = line.split_off(6);
-                                lock.dirty = true;
-                                song_title_get_time = Instant::now();
-                            } else if line.starts_with("elapsed: ") {
-                                let parse_pos_result = u64::from_str_radix(&line.split_off(9), 10);
-                                if let Ok(value) = parse_pos_result {
-                                    lock.current_song_position = value;
-                                    lock.dirty = true;
-                                    song_length_get_time = Instant::now();
+                    let mut read_vec: Vec<u8> = Vec::from(buf);
+                    read_vec.resize(count, 0);
+                    loop {
+                        let count = read_vec.len();
+                        let read_line_result = read_line(&mut read_vec, count, &mut saved, init);
+                        if let Ok(mut line) = read_line_result {
+                            line = saved_str + &line;
+                            saved_str = String::new();
+                            if init {
+                                if line.starts_with("OK MPD ") {
+                                    init = false;
+                                    println!("Got initial \"OK\" from MPD");
+                                    break;
                                 } else {
-                                    println!("Got error trying to get current_song_position");
+                                    return Err(String::from(
+                                        "Did not get expected init message from MPD",
+                                    ));
+                                }
+                            } else {
+                                // TODO handling of other messages
+                                println!("Got response: {}", line);
+                                if line.starts_with("OK") {
+                                    break;
+                                } else if line.starts_with("file: ") {
+                                    lock.current_song = line.split_off(6);
+                                    lock.dirty = true;
+                                    song_title_get_time = Instant::now();
+                                } else if line.starts_with("elapsed: ") {
+                                    let parse_pos_result = f64::from_str(&line.split_off(9));
+                                    if let Ok(value) = parse_pos_result {
+                                        lock.current_song_position = value;
+                                        lock.dirty = true;
+                                        song_pos_get_time = Instant::now();
+                                    } else {
+                                        println!("Got error trying to get current_song_position");
+                                    }
+                                } else if line.starts_with("duration: ") {
+                                    let parse_pos_result = f64::from_str(&line.split_off(10));
+                                    if let Ok(value) = parse_pos_result {
+                                        lock.current_song_length = value;
+                                        lock.dirty = true;
+                                        song_length_get_time = Instant::now();
+                                    }
                                 }
                             }
+                        } else if let Err((msg, read_line_in_progress)) = read_line_result {
+                            println!("Error during \"read_line\": {}", msg);
+                            saved_str = read_line_in_progress;
+                            break;
+                        } else {
+                            unreachable!();
                         }
-                    } else if let Err((msg, read_line_in_progress)) = read_line_result {
-                        println!("Error during \"read_line\": {}", msg);
-                        saved_str = read_line_in_progress;
-                    } else {
-                        unreachable!();
                     }
                 }
+            } else {
+                println!("Failed to acquire lock for reading to stream");
             }
         }
 
@@ -238,12 +281,16 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     if let Err(e) = write_result {
                         println!("Got error requesting currentsong info: {}", e);
                     }
-                } else if song_length_get_time.elapsed() > Duration::from_secs(5) {
-                    let write_result = lock.stream.write(b"status");
+                } else if song_length_get_time.elapsed() > Duration::from_secs(5)
+                    || song_pos_get_time.elapsed() > Duration::from_secs(5)
+                {
+                    let write_result = lock.stream.write(b"status\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting status: {}", e);
                     }
                 }
+            } else {
+                println!("Failed to acquire lock for writing to stream");
             }
         }
 
@@ -274,7 +321,7 @@ fn main() -> Result<(), String> {
         .set_read_timeout(Some(Duration::from_millis(50)))
         .expect("Should be able to set timeout for TcpStream reads");
     connection
-        .set_write_timeout(Some(Duration::from_secs(2)))
+        .set_write_timeout(Some(Duration::from_secs(1)))
         .expect("Should be able to set timeout for TcpStream writes");
 
     let shared_data = Arc::new(Mutex::new(Shared::new(connection)));
