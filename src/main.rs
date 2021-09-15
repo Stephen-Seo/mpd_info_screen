@@ -1,8 +1,8 @@
-use std::io::Read;
+use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -11,6 +11,8 @@ struct Opt {
     host: Ipv4Addr,
     #[structopt(default_value = "6600")]
     port: u16,
+    #[structopt(short = "p")]
+    password: Option<String>,
 }
 
 struct Shared {
@@ -20,6 +22,8 @@ struct Shared {
     current_song_position: u64,
     thread_running: bool,
     stream: TcpStream,
+    password: String,
+    dirty: bool,
 }
 
 impl Shared {
@@ -31,6 +35,8 @@ impl Shared {
             current_song_position: 0,
             thread_running: true,
             stream,
+            password: String::new(),
+            dirty: true,
         }
     }
 }
@@ -140,7 +146,7 @@ fn read_line(buf: &[u8], count: usize, saved: &mut Vec<u8>) -> Result<String, (S
             for i in 0..count {
                 saved.push(buf[idx + i as usize]);
             }
-            return Err((String::from("Not enough bytes"), result));
+            return Err((msg, result));
         } else {
             unreachable!();
         }
@@ -154,6 +160,9 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut init: bool = true;
     let mut saved: Vec<u8> = Vec::new();
     let mut saved_str: String = String::new();
+    let mut authenticated: bool = false;
+    let mut song_title_get_time: Instant = Instant::now() - Duration::from_secs(10);
+    let mut song_length_get_time: Instant = Instant::now() - Duration::from_secs(10);
     loop {
         if !shared_data
             .lock()
@@ -162,6 +171,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
         {
             break;
         }
+
+        // read block
         {
             let lock_result = shared_data.try_lock();
             if let Ok(mut lock) = lock_result {
@@ -182,6 +193,21 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                             }
                         } else {
                             // TODO handling of other messages
+                            println!("Got response: {}", line);
+                            if line.starts_with("file: ") {
+                                lock.current_song = line.split_off(6);
+                                lock.dirty = true;
+                                song_title_get_time = Instant::now();
+                            } else if line.starts_with("elapsed: ") {
+                                let parse_pos_result = u64::from_str_radix(&line.split_off(9), 10);
+                                if let Ok(value) = parse_pos_result {
+                                    lock.current_song_position = value;
+                                    lock.dirty = true;
+                                    song_length_get_time = Instant::now();
+                                } else {
+                                    println!("Got error trying to get current_song_position");
+                                }
+                            }
                         }
                     } else if let Err((msg, read_line_in_progress)) = read_line_result {
                         println!("Error during \"read_line\": {}", msg);
@@ -194,8 +220,48 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
         }
 
         // TODO send messages to get info
+
+        // write block
+        {
+            let lock_result = shared_data.try_lock();
+            if let Ok(mut lock) = lock_result {
+                if !authenticated && !lock.password.is_empty() {
+                    let p = lock.password.clone();
+                    let write_result = lock.stream.write(format!("password {}\n", p).as_bytes());
+                    if write_result.is_ok() {
+                        authenticated = true;
+                    } else if let Err(e) = write_result {
+                        println!("Got error requesting authentication: {}", e);
+                    }
+                } else if song_title_get_time.elapsed() > Duration::from_secs(5) {
+                    let write_result = lock.stream.write(b"currentsong\n");
+                    if let Err(e) = write_result {
+                        println!("Got error requesting currentsong info: {}", e);
+                    }
+                } else if song_length_get_time.elapsed() > Duration::from_secs(5) {
+                    let write_result = lock.stream.write(b"status");
+                    if let Err(e) = write_result {
+                        println!("Got error requesting status: {}", e);
+                    }
+                }
+            }
+        }
+
         thread::sleep(Duration::from_millis(50));
     }
+    Ok(())
+}
+
+fn get_info_from_shared(shared: Arc<Mutex<Shared>>, force_check: bool) -> Result<(), String> {
+    if let Ok(mut lock) = shared.lock() {
+        if lock.dirty || force_check {
+            println!("Current song: {}", lock.current_song);
+            println!("Current song length: {}", lock.current_song_length);
+            println!("Current song position: {}", lock.current_song_position);
+            lock.dirty = false;
+        }
+    }
+
     Ok(())
 }
 
@@ -207,15 +273,29 @@ fn main() -> Result<(), String> {
     connection
         .set_read_timeout(Some(Duration::from_millis(50)))
         .expect("Should be able to set timeout for TcpStream reads");
+    connection
+        .set_write_timeout(Some(Duration::from_secs(2)))
+        .expect("Should be able to set timeout for TcpStream writes");
 
     let shared_data = Arc::new(Mutex::new(Shared::new(connection)));
+    if let Some(p) = opt.password {
+        shared_data
+            .lock()
+            .expect("Should be able to get mutex lock")
+            .password = p;
+    }
     let thread_shared_data = shared_data.clone();
 
     let child = thread::spawn(move || {
         info_loop(thread_shared_data).expect("Failure during info_loop");
     });
 
-    thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(2));
+
+    get_info_from_shared(shared_data.clone(), false)
+        .expect("Should be able to get info from shared");
+
+    thread::sleep(Duration::from_secs(2));
 
     println!("Stopping thread...");
     shared_data
@@ -224,10 +304,13 @@ fn main() -> Result<(), String> {
         .thread_running = false;
 
     println!("Waiting on thread...");
-    thread::sleep(Duration::from_secs(5));
+    thread::sleep(Duration::from_secs(2));
 
     println!("Joining on thread...");
     child.join().expect("Should be able to join on thread");
+
+    get_info_from_shared(shared_data.clone(), true)
+        .expect("Should be able to get info from shared");
 
     Ok(())
 }
