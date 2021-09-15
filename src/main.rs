@@ -155,7 +155,11 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut saved: Vec<u8> = Vec::new();
     let mut saved_str: String = String::new();
     loop {
-        if !shared_data.lock().map_err(|_| String::from("Failed to get shared_data.thread_running"))?.thread_running {
+        if !shared_data
+            .lock()
+            .map_err(|_| String::from("Failed to get shared_data.thread_running"))?
+            .thread_running
+        {
             break;
         }
         {
@@ -172,7 +176,9 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 init = false;
                                 println!("Got initial \"OK\" from MPD");
                             } else {
-                                return Err(String::from("Did not get expected init message from MPD"));
+                                return Err(String::from(
+                                    "Did not get expected init message from MPD",
+                                ));
                             }
                         } else {
                             // TODO handling of other messages
@@ -188,7 +194,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
         }
 
         // TODO send messages to get info
-        thread::sleep(Duration::from_millis(100));
+        thread::sleep(Duration::from_millis(50));
     }
     Ok(())
 }
@@ -198,7 +204,9 @@ fn main() -> Result<(), String> {
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
 
     let connection = get_connection(opt.host, opt.port)?;
-    connection.set_read_timeout(Some(Duration::from_millis(100))).expect("Should be able to set timeout for TcpStream reads");
+    connection
+        .set_read_timeout(Some(Duration::from_millis(50)))
+        .expect("Should be able to set timeout for TcpStream reads");
 
     let shared_data = Arc::new(Mutex::new(Shared::new(connection)));
     let thread_shared_data = shared_data.clone();
@@ -210,7 +218,10 @@ fn main() -> Result<(), String> {
     thread::sleep(Duration::from_secs(5));
 
     println!("Stopping thread...");
-    shared_data.lock().map_err(|_| String::from("Failed to get shared_data.thread_running in main"))?.thread_running = false;
+    shared_data
+        .lock()
+        .map_err(|_| String::from("Failed to get shared_data.thread_running in main"))?
+        .thread_running = false;
 
     println!("Waiting on thread...");
     thread::sleep(Duration::from_secs(5));
