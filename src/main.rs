@@ -96,8 +96,8 @@ fn check_next_chars(
         ))
     } else if buf[idx] & 0b11110000 == 0b11100000 {
         if idx + 2 >= buf.len() {
-            for tidx in idx..buf.len() {
-                saved.push(buf[tidx]);
+            for c in buf.iter().skip(idx) {
+                saved.push(*c);
             }
             return Err((
                 String::from("Is three byte UTF-8, but not enough bytes provided"),
@@ -113,8 +113,8 @@ fn check_next_chars(
         ))
     } else if buf[idx] & 0b11111000 == 0b11110000 {
         if idx + 2 >= buf.len() {
-            for tidx in idx..buf.len() {
-                saved.push(buf[tidx]);
+            for c in buf.iter().skip(idx) {
+                saved.push(*c);
             }
             return Err((
                 String::from("Is four byte UTF-8, but not enough bytes provided"),
@@ -159,7 +159,7 @@ fn read_line(
             skip_count -= 1;
             continue;
         }
-        let next_char_result = check_next_chars(&mut buf_to_read, idx, saved);
+        let next_char_result = check_next_chars(&buf_to_read, idx, saved);
         if let Ok((c, s)) = next_char_result {
             if !init {
                 prev_two.push(c);
@@ -196,7 +196,7 @@ fn read_line(
     Err((String::from("Newline not reached"), result))
 }
 
-fn debug_write_albumart_to_file(data: &Vec<u8>) -> Result<(), String> {
+fn debug_write_albumart_to_file(data: &[u8]) -> Result<(), String> {
     let mut f = File::create("albumartOut.jpg")
         .map_err(|_| String::from("Failed to open file for writing albumart"))?;
     f.write_all(data)
