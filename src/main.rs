@@ -76,61 +76,78 @@ fn check_next_chars(
         return Err((String::from("idx out of bounds"), 0u8));
     }
     if buf[idx] & 0b10000000 == 0 {
-        Ok((
-            char::from_u32(buf[idx] as u32)
-                .ok_or_else(|| (String::from("Not one-byte UTF-8"), 0u8))?,
-            1u8,
-        ))
+        let result_str = String::from_utf8(vec![buf[idx]]);
+        if let Ok(mut s) = result_str {
+            let popped_char = s.pop();
+            if s.is_empty() {
+                Ok((popped_char.unwrap(), 1u8))
+            } else {
+                Err((String::from("Not one-byte UTF-8 char"), 0u8))
+            }
+        } else {
+            Err((String::from("Not one-byte UTF-8 char"), 0u8))
+        }
     } else if buf[idx] & 0b11100000 == 0b11000000 {
         if idx + 1 >= buf.len() {
             saved.push(buf[idx]);
             return Err((
-                String::from("Is two byte UTF-8, but not enough bytes provided"),
+                String::from("Is two-byte UTF-8, but not enough bytes provided"),
                 1u8,
             ));
         }
-        Ok((
-            char::from_u32((buf[idx] as u32) | ((buf[idx + 1] as u32) << 8))
-                .ok_or_else(|| (String::from("Not two-byte UTF-8"), 0u8))?,
-            2u8,
-        ))
+        let result_str = String::from_utf8(vec![buf[idx], buf[idx + 1]]);
+        if let Ok(mut s) = result_str {
+            let popped_char = s.pop();
+            if s.is_empty() {
+                Ok((popped_char.unwrap(), 2u8))
+            } else {
+                Err((String::from("Not two-byte UTF-8 char"), 0u8))
+            }
+        } else {
+            Err((String::from("Not two-byte UTF-8 char"), 0u8))
+        }
     } else if buf[idx] & 0b11110000 == 0b11100000 {
         if idx + 2 >= buf.len() {
             for c in buf.iter().skip(idx) {
                 saved.push(*c);
             }
             return Err((
-                String::from("Is three byte UTF-8, but not enough bytes provided"),
+                String::from("Is three-byte UTF-8, but not enough bytes provided"),
                 (idx + 3 - buf.len()) as u8,
             ));
         }
-        Ok((
-            char::from_u32(
-                (buf[idx] as u32) | ((buf[idx + 1] as u32) << 8) | ((buf[idx + 2] as u32) << 16),
-            )
-            .ok_or_else(|| (String::from("Not three-byte UTF-8"), 0u8))?,
-            3u8,
-        ))
+        let result_str = String::from_utf8(vec![buf[idx], buf[idx + 1], buf[idx + 2]]);
+        if let Ok(mut s) = result_str {
+            let popped_char = s.pop();
+            if s.is_empty() {
+                Ok((popped_char.unwrap(), 3u8))
+            } else {
+                Err((String::from("Not three-byte UTF-8 char"), 0u8))
+            }
+        } else {
+            Err((String::from("Not three-byte UTF-8 char"), 0u8))
+        }
     } else if buf[idx] & 0b11111000 == 0b11110000 {
-        if idx + 2 >= buf.len() {
+        if idx + 3 >= buf.len() {
             for c in buf.iter().skip(idx) {
                 saved.push(*c);
             }
             return Err((
-                String::from("Is four byte UTF-8, but not enough bytes provided"),
+                String::from("Is four-byte UTF-8, but not enough bytes provided"),
                 (idx + 4 - buf.len()) as u8,
             ));
         }
-        Ok((
-            char::from_u32(
-                (buf[idx] as u32)
-                    | ((buf[idx + 1] as u32) << 8)
-                    | ((buf[idx + 2] as u32) << 16)
-                    | ((buf[idx + 3] as u32) << 24),
-            )
-            .ok_or_else(|| (String::from("Not four-byte UTF-8"), 0u8))?,
-            4u8,
-        ))
+        let result_str = String::from_utf8(vec![buf[idx], buf[idx + 1], buf[idx + 2]]);
+        if let Ok(mut s) = result_str {
+            let popped_char = s.pop();
+            if s.is_empty() {
+                Ok((popped_char.unwrap(), 4u8))
+            } else {
+                Err((String::from("Not four-byte UTF-8 char"), 0u8))
+            }
+        } else {
+            Err((String::from("Not four-byte UTF-8 char"), 0u8))
+        }
     } else {
         Err((String::from("Invalid UTF-8 char"), 0u8))
     }
