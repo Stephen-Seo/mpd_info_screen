@@ -407,6 +407,26 @@ fn window_conf() -> Conf {
     }
 }
 
+fn seconds_to_time(seconds: f64) -> String {
+    let seconds_int: u64 = seconds.floor() as u64;
+    let minutes = seconds_int / 60;
+    let new_seconds: f64 = seconds - (minutes * 60) as f64;
+    let mut result: String;
+    if minutes > 0 {
+        result = minutes.to_string();
+        result.push(':');
+    } else {
+        result = String::new();
+    }
+    result.push_str(&new_seconds.to_string());
+    let idx_result = result.find('.');
+    if let Some(idx) = idx_result {
+        result.truncate(idx + 2);
+    }
+
+    result
+}
+
 #[macroquad::main(window_conf)]
 async fn main() -> Result<(), String> {
     let opt = Opt::from_args();
@@ -553,11 +573,7 @@ async fn main() -> Result<(), String> {
                 WHITE,
             );
 
-            let mut timer_string = track_timer.to_string();
-            let dot_pos = timer_string.find(".");
-            if let Some(pos) = dot_pos {
-                timer_string.truncate(pos + 2);
-            }
+            let timer_string = seconds_to_time(track_timer);
             let timer_dim = measure_text(&timer_string, None, 64, 1.0f32);
             draw_rectangle(
                 TIMER_X_OFFSET,
