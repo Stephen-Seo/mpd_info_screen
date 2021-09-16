@@ -25,11 +25,11 @@ counter, and the filename currently being played
 
 # Issues / TODO
 
-[ ] UTF-8 Non-ascii font support
+- [ ] UTF-8 Non-ascii font support
 ([macroquad](https://crates.io/crates/macroquad) is being used to display a
 window, text, and album art, but doesn't seem to have support for ".ttc" fonts
 that could render CJK text)  
-[ ] Support for album art not embedded but in the same directory
+- [ ] Support for album art not embedded but in the same directory
 
 # Legal stuff
 
