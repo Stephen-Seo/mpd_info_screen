@@ -418,6 +418,9 @@ fn seconds_to_time(seconds: f64) -> String {
     } else {
         result = String::new();
     }
+    if new_seconds < 10.0 {
+        result.push('0');
+    }
     result.push_str(&new_seconds.to_string());
     let idx_result = result.find('.');
     if let Some(idx) = idx_result {
