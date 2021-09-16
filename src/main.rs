@@ -401,6 +401,8 @@ fn window_conf() -> Conf {
     Conf {
         window_title: String::from("mpd info screen"),
         fullscreen: false,
+        window_width: 800,
+        window_height: 800,
         ..Default::default()
     }
 }
