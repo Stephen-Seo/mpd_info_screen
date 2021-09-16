@@ -441,7 +441,7 @@ async fn main() -> Result<(), String> {
         let dt: f64 = get_frame_time() as f64;
         clear_background(BLACK);
 
-        if is_key_pressed(KeyCode::Escape) {
+        if is_key_pressed(KeyCode::Escape) || is_key_pressed(KeyCode::Q) {
             break 'macroquad_main;
         }
 
