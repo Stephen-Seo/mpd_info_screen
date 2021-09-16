@@ -418,7 +418,7 @@ fn seconds_to_time(seconds: f64) -> String {
     } else {
         result = String::new();
     }
-    if new_seconds < 10.0 {
+    if new_seconds < 10.0 && seconds >= 0.0 {
         result.push('0');
     }
     result.push_str(&new_seconds.to_string());
