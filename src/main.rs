@@ -1,4 +1,4 @@
-use std::io::{Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -18,6 +18,7 @@ struct Opt {
 
 struct Shared {
     art_data: Vec<u8>,
+    art_data_size: usize,
     current_song: String,
     current_song_length: f64,
     current_song_position: f64,
@@ -31,6 +32,7 @@ impl Shared {
     fn new(stream: TcpStream) -> Self {
         Self {
             art_data: Vec::new(),
+            art_data_size: 0,
             current_song: String::new(),
             current_song_length: 0.0,
             current_song_position: 0.0,
@@ -188,7 +190,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut song_title_get_time: Instant = Instant::now() - Duration::from_secs(10);
     let mut song_pos_get_time: Instant = Instant::now() - Duration::from_secs(10);
     let mut song_length_get_time: Instant = Instant::now() - Duration::from_secs(10);
-    loop {
+    let mut current_binary_size: usize = 0;
+    'main: loop {
         if !shared_data
             .lock()
             .map_err(|_| String::from("Failed to get shared_data.thread_running"))?
@@ -205,8 +208,26 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                 if let Ok(count) = read_result {
                     let mut read_vec: Vec<u8> = Vec::from(buf);
                     read_vec.resize(count, 0);
-                    loop {
-                        let count = read_vec.len();
+                    'outer: loop {
+                        let mut count = read_vec.len();
+                        if current_binary_size > 0 {
+                            if current_binary_size <= count {
+                                lock.art_data
+                                    .extend_from_slice(&read_vec[0..current_binary_size]);
+                                read_vec = read_vec.split_off(current_binary_size + 1);
+                                count = read_vec.len();
+                                current_binary_size = 0;
+                                println!(
+                                    "art_data len is {} after fully reading",
+                                    lock.art_data.len()
+                                );
+                            } else {
+                                lock.art_data.extend_from_slice(&read_vec[0..count]);
+                                current_binary_size -= count;
+                                println!("art_data len is {}", lock.art_data.len());
+                                continue 'main;
+                            }
+                        }
                         let read_line_result = read_line(&mut read_vec, count, &mut saved, init);
                         if let Ok(mut line) = read_line_result {
                             line = saved_str + &line;
@@ -227,7 +248,13 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 if line.starts_with("OK") {
                                     break;
                                 } else if line.starts_with("file: ") {
-                                    lock.current_song = line.split_off(6);
+                                    let song_file = line.split_off(6);
+                                    if song_file != lock.current_song {
+                                        lock.current_song = song_file;
+                                        lock.art_data.clear();
+                                        lock.art_data_size = 0;
+                                        println!("Got different song file, clearing art_data...");
+                                    }
                                     lock.dirty = true;
                                     song_title_get_time = Instant::now();
                                 } else if line.starts_with("elapsed: ") {
@@ -245,6 +272,18 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         lock.current_song_length = value;
                                         lock.dirty = true;
                                         song_length_get_time = Instant::now();
+                                    }
+                                } else if line.starts_with("size: ") {
+                                    let parse_artsize_result = usize::from_str(&line.split_off(6));
+                                    if let Ok(value) = parse_artsize_result {
+                                        lock.art_data_size = value;
+                                        lock.dirty = true;
+                                    }
+                                } else if line.starts_with("binary: ") {
+                                    let parse_artbinarysize_result =
+                                        usize::from_str(&line.split_off(8));
+                                    if let Ok(value) = parse_artbinarysize_result {
+                                        current_binary_size = value;
                                     }
                                 }
                             }
@@ -287,6 +326,17 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     let write_result = lock.stream.write(b"status\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting status: {}", e);
+                    }
+                } else if (lock.art_data.is_empty() || lock.art_data.len() != lock.art_data_size)
+                    && !lock.current_song.is_empty()
+                {
+                    let title = lock.current_song.clone();
+                    let art_data_length = lock.art_data.len();
+                    let write_result = lock.stream.write(
+                        format!("readpicture \"{}\" {}\n", title, art_data_length).as_bytes(),
+                    );
+                    if let Err(e) = write_result {
+                        println!("Got error requesting albumart: {}", e);
                     }
                 }
             } else {
@@ -342,7 +392,7 @@ fn main() -> Result<(), String> {
     get_info_from_shared(shared_data.clone(), false)
         .expect("Should be able to get info from shared");
 
-    thread::sleep(Duration::from_secs(2));
+    thread::sleep(Duration::from_secs(10));
 
     println!("Stopping thread...");
     shared_data
