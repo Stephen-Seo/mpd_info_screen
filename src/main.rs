@@ -289,6 +289,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 //println!("Got response: {}", line);
                                 if line.starts_with("OK") {
                                     break;
+                                } else if line.starts_with("ACK") {
+                                    println!("ERROR: {}", line);
                                 } else if line.starts_with("file: ") {
                                     let song_file = line.split_off(6);
                                     if song_file != lock.current_song {
