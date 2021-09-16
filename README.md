@@ -5,6 +5,24 @@ A Rust program that displays info about the currently running MPD server.
 The window shows albumart (embedded in the audio file), a "time-remaining"
 counter, and the filename currently being played
 
+# Usage
+
+    mpd_info_screen 0.1.0
+    
+    USAGE:
+        mpd_info_screen [OPTIONS] <host> [port]
+    
+    FLAGS:
+        -h, --help       Prints help information
+        -V, --version    Prints version information
+    
+    OPTIONS:
+        -p <password>        
+    
+    ARGS:
+        <host>    
+        <port>     [default: 6600]
+
 # Issues / TODO
 
 [ ] UTF-8 Non-ascii font support
