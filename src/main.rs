@@ -1,4 +1,5 @@
-use std::io::{BufReader, Read, Write};
+use std::fs::File;
+use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::{Arc, Mutex};
@@ -131,12 +132,12 @@ fn read_line(
 ) -> Result<String, (String, String)> {
     let mut result = String::new();
 
-    if !saved.is_empty() {
-        // TODO
-        println!("TODO handle \"saved\" vec");
-    }
+    let mut buf_to_read: Vec<u8> = Vec::with_capacity(saved.len() + buf.len());
 
-    saved.clear();
+    if !saved.is_empty() {
+        buf_to_read.append(saved);
+    }
+    buf_to_read.append(buf);
 
     let mut prev_two: Vec<char> = Vec::with_capacity(3);
 
@@ -146,7 +147,7 @@ fn read_line(
             skip_count -= 1;
             continue;
         }
-        let next_char_result = check_next_chars(buf, idx, saved);
+        let next_char_result = check_next_chars(&mut buf_to_read, idx, saved);
         if let Ok((c, s)) = next_char_result {
             if !init {
                 prev_two.push(c);
@@ -154,31 +155,42 @@ fn read_line(
                     prev_two.remove(0);
                 }
                 if ['O', 'K'] == prev_two.as_slice() {
-                    *buf = buf.split_off(2);
+                    buf_to_read = buf_to_read.split_off(2);
                     result = String::from("OK");
+                    buf.append(&mut buf_to_read);
                     return Ok(result);
                 }
             }
             if c == '\n' {
-                *buf = buf.split_off(idx + s as usize);
+                buf_to_read = buf_to_read.split_off(idx + s as usize);
+                buf.append(&mut buf_to_read);
                 return Ok(result);
             }
             result.push(c);
             skip_count = s - 1;
         } else if let Err((msg, count)) = next_char_result {
             for i in 0..count {
-                saved.push(buf[idx + i as usize]);
+                saved.push(buf_to_read[idx + i as usize]);
             }
-            *buf = buf.split_off(idx);
+            buf_to_read = buf_to_read.split_off(idx);
+            buf.append(&mut buf_to_read);
             return Err((msg, result));
         } else {
             unreachable!();
         }
     }
 
-    *saved = buf.to_vec();
-    *buf = Vec::new();
+    *saved = buf_to_read;
     Err((String::from("Newline not reached"), result))
+}
+
+fn debug_write_albumart_to_file(data: &Vec<u8>) -> Result<(), String> {
+    let mut f = File::create("albumartOut.jpg")
+        .map_err(|_| String::from("Failed to open file for writing albumart"))?;
+    f.write_all(data)
+        .map_err(|_| String::from("Failed to write to albumartOut.jpg"))?;
+
+    Ok(())
 }
 
 fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
@@ -208,7 +220,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                 if let Ok(count) = read_result {
                     let mut read_vec: Vec<u8> = Vec::from(buf);
                     read_vec.resize(count, 0);
-                    'outer: loop {
+                    loop {
                         let mut count = read_vec.len();
                         if current_binary_size > 0 {
                             if current_binary_size <= count {
@@ -221,6 +233,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     "art_data len is {} after fully reading",
                                     lock.art_data.len()
                                 );
+                                // TODO Debug
+                                //let write_file_result = debug_write_albumart_to_file(&lock.art_data);
                             } else {
                                 lock.art_data.extend_from_slice(&read_vec[0..count]);
                                 current_binary_size -= count;
@@ -243,7 +257,6 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     ));
                                 }
                             } else {
-                                // TODO handling of other messages
                                 println!("Got response: {}", line);
                                 if line.starts_with("OK") {
                                     break;
@@ -300,8 +313,6 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                 println!("Failed to acquire lock for reading to stream");
             }
         }
-
-        // TODO send messages to get info
 
         // write block
         {
