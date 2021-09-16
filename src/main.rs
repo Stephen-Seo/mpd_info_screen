@@ -196,14 +196,14 @@ fn read_line(
     Err((String::from("Newline not reached"), result))
 }
 
-fn debug_write_albumart_to_file(data: &[u8]) -> Result<(), String> {
-    let mut f = File::create("albumartOut.jpg")
-        .map_err(|_| String::from("Failed to open file for writing albumart"))?;
-    f.write_all(data)
-        .map_err(|_| String::from("Failed to write to albumartOut.jpg"))?;
-
-    Ok(())
-}
+//fn debug_write_albumart_to_file(data: &[u8]) -> Result<(), String> {
+//    let mut f = File::create("albumartOut.jpg")
+//        .map_err(|_| String::from("Failed to open file for writing albumart"))?;
+//    f.write_all(data)
+//        .map_err(|_| String::from("Failed to write to albumartOut.jpg"))?;
+//
+//    Ok(())
+//}
 
 fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut buf: [u8; 4192] = [0; 4192];
