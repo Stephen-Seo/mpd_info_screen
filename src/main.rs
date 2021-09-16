@@ -1,3 +1,6 @@
+use image::{DynamicImage, ImageResult};
+use macroquad::prelude::*;
+use std::convert::TryInto;
 use std::fs::File;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
@@ -6,6 +9,13 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
+
+const POLL_DURATION: Duration = Duration::from_secs(2);
+const TITLE_X_OFFSET: f32 = 20.0f32;
+const TITLE_Y_OFFSET: f32 = 20.0f32;
+const TIMER_X_OFFSET: f32 = 20.0f32;
+const TIMER_Y_OFFSET: f32 = 20.0f32;
+const TIME_MAX_DIFF: f64 = 2.0f64;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "mpd_info_screen")]
@@ -23,6 +33,7 @@ struct Shared {
     current_song: String,
     current_song_length: f64,
     current_song_position: f64,
+    current_song_pos_rec: Instant,
     thread_running: bool,
     stream: TcpStream,
     password: String,
@@ -37,6 +48,7 @@ impl Shared {
             current_song: String::new(),
             current_song_length: 0.0,
             current_song_position: 0.0,
+            current_song_pos_rec: Instant::now(),
             thread_running: true,
             stream,
             password: String::new(),
@@ -276,6 +288,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         lock.current_song_position = value;
                                         lock.dirty = true;
                                         song_pos_get_time = Instant::now();
+                                        lock.current_song_pos_rec = Instant::now();
                                     } else {
                                         println!("Got error trying to get current_song_position");
                                     }
@@ -326,13 +339,13 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
                     }
-                } else if song_title_get_time.elapsed() > Duration::from_secs(5) {
+                } else if song_title_get_time.elapsed() > POLL_DURATION {
                     let write_result = lock.stream.write(b"currentsong\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting currentsong info: {}", e);
                     }
-                } else if song_length_get_time.elapsed() > Duration::from_secs(5)
-                    || song_pos_get_time.elapsed() > Duration::from_secs(5)
+                } else if song_length_get_time.elapsed() > POLL_DURATION
+                    || song_pos_get_time.elapsed() > POLL_DURATION
                 {
                     let write_result = lock.stream.write(b"status\n");
                     if let Err(e) = write_result {
@@ -360,20 +373,40 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     Ok(())
 }
 
-fn get_info_from_shared(shared: Arc<Mutex<Shared>>, force_check: bool) -> Result<(), String> {
+fn get_info_from_shared(
+    shared: Arc<Mutex<Shared>>,
+    force_check: bool,
+) -> Result<(String, f64, f64, Instant), String> {
+    let mut title: String = String::new();
+    let mut length: f64 = 0.0;
+    let mut pos: f64 = 0.0;
+    let mut instant_rec: Instant = Instant::now();
     if let Ok(mut lock) = shared.lock() {
         if lock.dirty || force_check {
-            println!("Current song: {}", lock.current_song);
-            println!("Current song length: {}", lock.current_song_length);
-            println!("Current song position: {}", lock.current_song_position);
+            title = lock.current_song.clone();
+            length = lock.current_song_length;
+            pos = lock.current_song_position;
+            instant_rec = lock.current_song_pos_rec;
+            //println!("Current song: {}", lock.current_song);
+            //println!("Current song length: {}", lock.current_song_length);
+            //println!("Current song position: {}", lock.current_song_position);
             lock.dirty = false;
         }
     }
 
-    Ok(())
+    Ok((title, length, pos, instant_rec))
 }
 
-fn main() -> Result<(), String> {
+fn window_conf() -> Conf {
+    Conf {
+        window_title: String::from("mpd info screen"),
+        fullscreen: false,
+        ..Default::default()
+    }
+}
+
+#[macroquad::main(window_conf)]
+async fn main() -> Result<(), String> {
     let opt = Opt::from_args();
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
 
@@ -398,12 +431,158 @@ fn main() -> Result<(), String> {
         info_loop(thread_shared_data).expect("Failure during info_loop");
     });
 
-    thread::sleep(Duration::from_secs(2));
+    let wait_time: f64 = 0.75;
+    let mut timer: f64 = 0.0;
+    let mut track_timer: f64 = 0.0;
+    let mut title: String = String::new();
+    let mut art_texture: Option<Texture2D> = None;
 
-    get_info_from_shared(shared_data.clone(), false)
-        .expect("Should be able to get info from shared");
+    'macroquad_main: loop {
+        let dt: f64 = get_frame_time() as f64;
+        clear_background(BLACK);
 
-    thread::sleep(Duration::from_secs(10));
+        if is_key_pressed(KeyCode::Escape) {
+            break 'macroquad_main;
+        }
+
+        timer -= dt;
+        track_timer -= dt;
+        if timer < 0.0 || track_timer < 0.0 {
+            timer = wait_time;
+            let info_result = get_info_from_shared(shared_data.clone(), true);
+            if let Ok((track_title, duration, pos, instant_rec)) = info_result {
+                if track_title != title {
+                    title = track_title;
+                    art_texture = None;
+                }
+                let duration_since = instant_rec.elapsed();
+                let recorded_time = duration - pos - duration_since.as_secs_f64();
+                if (recorded_time - track_timer).abs() > TIME_MAX_DIFF {
+                    track_timer = duration - pos;
+                }
+            }
+
+            if art_texture.is_none() {
+                let mut image_result: Option<ImageResult<DynamicImage>> = None;
+                {
+                    let lock_result = shared_data.lock();
+                    if let Ok(l) = lock_result {
+                        image_result = Some(image::load_from_memory(&l.art_data));
+                    }
+                }
+                if let Some(Ok(dynimg)) = image_result {
+                    let img_buf = dynimg.to_rgba8();
+                    art_texture = Some(Texture2D::from_rgba8(
+                        img_buf
+                            .width()
+                            .try_into()
+                            .expect("width of image should fit in u16"),
+                        img_buf
+                            .height()
+                            .try_into()
+                            .expect("height of image should fit into u16"),
+                        &img_buf.to_vec(),
+                    ));
+                }
+            }
+        }
+
+        if let Some(texture) = art_texture {
+            if texture.width() > screen_width() || texture.height() > screen_height() {
+                let ratio: f32 = texture.width() / texture.height();
+                // try filling to height
+                let mut height = screen_height();
+                let mut width = screen_height() * ratio;
+                if width > screen_width() {
+                    // try filling to width instead
+                    width = screen_width();
+                    height = screen_width() / ratio;
+                }
+
+                let draw_params: DrawTextureParams = DrawTextureParams {
+                    dest_size: Some(Vec2::new(width, height)),
+                    ..Default::default()
+                };
+                draw_texture_ex(
+                    texture,
+                    (screen_width() - width) / 2.0f32,
+                    (screen_height() - height) / 2.0f32,
+                    WHITE,
+                    draw_params,
+                );
+            } else {
+                draw_texture(
+                    texture,
+                    (screen_width() - texture.width()) / 2.0f32,
+                    (screen_height() - texture.height()) / 2.0f32,
+                    WHITE,
+                );
+            }
+        }
+
+        if !title.is_empty() {
+            let mut text_size = 64;
+            let mut text_dim: TextDimensions;
+            loop {
+                text_dim = measure_text(&title, None, text_size, 1.0f32);
+                if text_dim.width + TITLE_X_OFFSET > screen_width() {
+                    text_size -= 4;
+                } else {
+                    break;
+                }
+
+                if text_size <= 4 {
+                    text_size = 4;
+                    break;
+                }
+            }
+            draw_rectangle(
+                TITLE_X_OFFSET,
+                screen_height() - TITLE_Y_OFFSET - text_dim.height * 2.0,
+                text_dim.width,
+                text_dim.height,
+                Color::new(0.0, 0.0, 0.0, 0.4),
+            );
+            draw_text(
+                &title,
+                TITLE_X_OFFSET,
+                screen_height() - TITLE_Y_OFFSET - text_dim.height,
+                text_size as f32,
+                WHITE,
+            );
+
+            let mut timer_string = track_timer.to_string();
+            let dot_pos = timer_string.find(".");
+            if let Some(pos) = dot_pos {
+                timer_string.truncate(pos + 2);
+            }
+            let timer_dim = measure_text(&timer_string, None, 64, 1.0f32);
+            draw_rectangle(
+                TIMER_X_OFFSET,
+                screen_height()
+                    - TITLE_Y_OFFSET
+                    - text_dim.height
+                    - TIMER_Y_OFFSET
+                    - timer_dim.height * 2.0,
+                timer_dim.width,
+                timer_dim.height,
+                Color::new(0.0, 0.0, 0.0, 0.4),
+            );
+            draw_text(
+                &timer_string,
+                TIMER_X_OFFSET,
+                screen_height()
+                    - TITLE_Y_OFFSET
+                    - text_dim.height
+                    - TIMER_Y_OFFSET
+                    - timer_dim.height,
+                64.0f32,
+                WHITE,
+            );
+        }
+
+        next_frame().await
+    }
 
     println!("Stopping thread...");
     shared_data
@@ -412,7 +591,7 @@ fn main() -> Result<(), String> {
         .thread_running = false;
 
     println!("Waiting on thread...");
-    thread::sleep(Duration::from_secs(2));
+    thread::sleep(Duration::from_millis(200));
 
     println!("Joining on thread...");
     child.join().expect("Should be able to join on thread");
