@@ -23,6 +23,9 @@ counter, and the filename currently being played
         <host>    
         <port>     [default: 6600]
 
+Note that Escape key and Q key pressed when the window is focused closes the
+program.
+
 # Issues / TODO
 
 - [ ] UTF-8 Non-ascii font support
