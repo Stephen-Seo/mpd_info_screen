@@ -241,16 +241,16 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 read_vec = read_vec.split_off(current_binary_size + 1);
                                 count = read_vec.len();
                                 current_binary_size = 0;
-                                println!(
-                                    "art_data len is {} after fully reading",
-                                    lock.art_data.len()
-                                );
+                                //println!(
+                                //    "art_data len is {} after fully reading",
+                                //    lock.art_data.len()
+                                //);
                                 // TODO Debug
                                 //let write_file_result = debug_write_albumart_to_file(&lock.art_data);
                             } else {
                                 lock.art_data.extend_from_slice(&read_vec[0..count]);
                                 current_binary_size -= count;
-                                println!("art_data len is {}", lock.art_data.len());
+                                //println!("art_data len is {}", lock.art_data.len());
                                 continue 'main;
                             }
                         }
@@ -269,7 +269,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     ));
                                 }
                             } else {
-                                println!("Got response: {}", line);
+                                //println!("Got response: {}", line);
                                 if line.starts_with("OK") {
                                     break;
                                 } else if line.starts_with("file: ") {
@@ -278,7 +278,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         lock.current_song = song_file;
                                         lock.art_data.clear();
                                         lock.art_data_size = 0;
-                                        println!("Got different song file, clearing art_data...");
+                                        //println!("Got different song file, clearing art_data...");
                                     }
                                     lock.dirty = true;
                                     song_title_get_time = Instant::now();
@@ -590,7 +590,7 @@ async fn main() -> Result<(), String> {
         .map_err(|_| String::from("Failed to get shared_data.thread_running in main"))?
         .thread_running = false;
 
-    println!("Waiting on thread...");
+    //println!("Waiting on thread...");
     thread::sleep(Duration::from_millis(200));
 
     println!("Joining on thread...");
