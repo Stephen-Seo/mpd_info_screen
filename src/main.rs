@@ -16,6 +16,8 @@ const TITLE_Y_OFFSET: f32 = 20.0f32;
 const TIMER_X_OFFSET: f32 = 20.0f32;
 const TIMER_Y_OFFSET: f32 = 20.0f32;
 const TIME_MAX_DIFF: f64 = 2.0f64;
+const INITIAL_FONT_SIZE: u16 = 96;
+const SCREEN_DIFF_MARGIN: f32 = 1.0;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "mpd_info_screen")]
@@ -38,6 +40,9 @@ struct Shared {
     stream: TcpStream,
     password: String,
     dirty: bool,
+    can_authenticate: bool,
+    can_get_album_art: bool,
+    can_get_status: bool,
 }
 
 impl Shared {
@@ -53,8 +58,28 @@ impl Shared {
             stream,
             password: String::new(),
             dirty: true,
+            can_authenticate: true,
+            can_get_album_art: true,
+            can_get_status: true,
         }
     }
+}
+
+#[derive(Debug, PartialEq, Copy, Clone)]
+enum PollState {
+    None,
+    Password,
+    CurrentSong,
+    Status,
+    ReadPicture,
+}
+
+#[derive(Debug, Clone)]
+struct InfoFromShared {
+    title: String,
+    length: f64,
+    pos: f64,
+    instant_rec: Instant,
 }
 
 fn get_connection(host: Ipv4Addr, port: u16) -> Result<TcpStream, String> {
@@ -232,6 +257,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut song_pos_get_time: Instant = Instant::now() - Duration::from_secs(10);
     let mut song_length_get_time: Instant = Instant::now() - Duration::from_secs(10);
     let mut current_binary_size: usize = 0;
+    let mut poll_state = PollState::None;
     'main: loop {
         if !shared_data
             .lock()
@@ -258,6 +284,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 read_vec = read_vec.split_off(current_binary_size + 1);
                                 count = read_vec.len();
                                 current_binary_size = 0;
+                                poll_state = PollState::None;
                                 //println!(
                                 //    "art_data len is {} after fully reading",
                                 //    lock.art_data.len()
@@ -279,6 +306,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 if line.starts_with("OK MPD ") {
                                     init = false;
                                     println!("Got initial \"OK\" from MPD");
+                                    poll_state = PollState::None;
                                     break;
                                 } else {
                                     return Err(String::from(
@@ -288,9 +316,19 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                             } else {
                                 //println!("Got response: {}", line);
                                 if line.starts_with("OK") {
+                                    poll_state = PollState::None;
                                     break;
                                 } else if line.starts_with("ACK") {
                                     println!("ERROR: {}", line);
+                                    match poll_state {
+                                        PollState::Password => lock.can_authenticate = false,
+                                        PollState::CurrentSong | PollState::Status => {
+                                            lock.can_get_status = false
+                                        }
+                                        PollState::ReadPicture => lock.can_get_album_art = false,
+                                        _ => (),
+                                    }
+                                    poll_state = PollState::None;
                                 } else if line.starts_with("file: ") {
                                     let song_file = line.split_off(6);
                                     if song_file != lock.current_song {
@@ -347,31 +385,38 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
         }
 
         // write block
-        {
+        if poll_state == PollState::None {
             let lock_result = shared_data.try_lock();
             if let Ok(mut lock) = lock_result {
-                if !authenticated && !lock.password.is_empty() {
+                if !authenticated && !lock.password.is_empty() && lock.can_authenticate {
                     let p = lock.password.clone();
                     let write_result = lock.stream.write(format!("password {}\n", p).as_bytes());
                     if write_result.is_ok() {
                         authenticated = true;
+                        poll_state = PollState::Password;
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
                     }
-                } else if song_title_get_time.elapsed() > POLL_DURATION {
+                } else if song_title_get_time.elapsed() > POLL_DURATION && lock.can_get_status {
                     let write_result = lock.stream.write(b"currentsong\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting currentsong info: {}", e);
+                    } else {
+                        poll_state = PollState::CurrentSong;
                     }
-                } else if song_length_get_time.elapsed() > POLL_DURATION
-                    || song_pos_get_time.elapsed() > POLL_DURATION
+                } else if (song_length_get_time.elapsed() > POLL_DURATION
+                    || song_pos_get_time.elapsed() > POLL_DURATION)
+                    && lock.can_get_status
                 {
                     let write_result = lock.stream.write(b"status\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting status: {}", e);
+                    } else {
+                        poll_state = PollState::Status;
                     }
                 } else if (lock.art_data.is_empty() || lock.art_data.len() != lock.art_data_size)
                     && !lock.current_song.is_empty()
+                    && lock.can_get_album_art
                 {
                     let title = lock.current_song.clone();
                     let art_data_length = lock.art_data.len();
@@ -380,11 +425,16 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     );
                     if let Err(e) = write_result {
                         println!("Got error requesting albumart: {}", e);
+                    } else {
+                        poll_state = PollState::ReadPicture;
                     }
                 }
             } else {
                 println!("Failed to acquire lock for writing to stream");
             }
+        } else {
+            // TODO DEBUG
+            //println!("poll_state == {:?}, skipping write...", poll_state);
         }
 
         thread::sleep(Duration::from_millis(50));
@@ -395,7 +445,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
 fn get_info_from_shared(
     shared: Arc<Mutex<Shared>>,
     force_check: bool,
-) -> Result<(String, f64, f64, Instant), String> {
+) -> Result<InfoFromShared, String> {
     let mut title: String = String::new();
     let mut length: f64 = 0.0;
     let mut pos: f64 = 0.0;
@@ -413,7 +463,12 @@ fn get_info_from_shared(
         }
     }
 
-    Ok((title, length, pos, instant_rec))
+    Ok(InfoFromShared {
+        title,
+        length,
+        pos,
+        instant_rec,
+    })
 }
 
 fn window_conf() -> Conf {
@@ -480,6 +535,10 @@ async fn main() -> Result<(), String> {
     let mut track_timer: f64 = 0.0;
     let mut title: String = String::new();
     let mut art_texture: Option<Texture2D> = None;
+    let mut filename_font_size: Option<u16> = None;
+    let mut text_dim: TextDimensions = measure_text("undefined", None, 24, 1.0);
+    let mut prev_width = screen_width();
+    let mut prev_height = screen_height();
 
     'macroquad_main: loop {
         let dt: f64 = get_frame_time() as f64;
@@ -487,6 +546,12 @@ async fn main() -> Result<(), String> {
 
         if is_key_pressed(KeyCode::Escape) || is_key_pressed(KeyCode::Q) {
             break 'macroquad_main;
+        } else if (prev_width - screen_width()).abs() > SCREEN_DIFF_MARGIN
+            || (prev_height - screen_height()).abs() > SCREEN_DIFF_MARGIN
+        {
+            prev_width = screen_width();
+            prev_height = screen_height();
+            filename_font_size = None;
         }
 
         timer -= dt;
@@ -494,15 +559,16 @@ async fn main() -> Result<(), String> {
         if timer < 0.0 || track_timer < 0.0 {
             timer = wait_time;
             let info_result = get_info_from_shared(shared_data.clone(), true);
-            if let Ok((track_title, duration, pos, instant_rec)) = info_result {
-                if track_title != title {
-                    title = track_title;
+            if let Ok(info) = info_result {
+                if info.title != title {
+                    title = info.title;
                     art_texture = None;
+                    filename_font_size = None;
                 }
-                let duration_since = instant_rec.elapsed();
-                let recorded_time = duration - pos - duration_since.as_secs_f64();
+                let duration_since = info.instant_rec.elapsed();
+                let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
                 if (recorded_time - track_timer).abs() > TIME_MAX_DIFF {
-                    track_timer = duration - pos;
+                    track_timer = info.length - info.pos - duration_since.as_secs_f64();
                 }
             }
 
@@ -532,15 +598,15 @@ async fn main() -> Result<(), String> {
         }
 
         if let Some(texture) = art_texture {
-            if texture.width() > screen_width() || texture.height() > screen_height() {
+            if texture.width() > prev_width || texture.height() > prev_height {
                 let ratio: f32 = texture.width() / texture.height();
                 // try filling to height
-                let mut height = screen_height();
-                let mut width = screen_height() * ratio;
-                if width > screen_width() {
+                let mut height = prev_height;
+                let mut width = prev_height * ratio;
+                if width > prev_width {
                     // try filling to width instead
-                    width = screen_width();
-                    height = screen_width() / ratio;
+                    width = prev_width;
+                    height = prev_width / ratio;
                 }
 
                 let draw_params: DrawTextureParams = DrawTextureParams {
@@ -549,40 +615,48 @@ async fn main() -> Result<(), String> {
                 };
                 draw_texture_ex(
                     texture,
-                    (screen_width() - width) / 2.0f32,
-                    (screen_height() - height) / 2.0f32,
+                    (prev_width - width) / 2.0f32,
+                    (prev_height - height) / 2.0f32,
                     WHITE,
                     draw_params,
                 );
             } else {
                 draw_texture(
                     texture,
-                    (screen_width() - texture.width()) / 2.0f32,
-                    (screen_height() - texture.height()) / 2.0f32,
+                    (prev_width - texture.width()) / 2.0f32,
+                    (prev_height - texture.height()) / 2.0f32,
                     WHITE,
                 );
             }
         }
 
         if !title.is_empty() {
-            let mut text_size = 64;
-            let mut text_dim: TextDimensions;
-            loop {
-                text_dim = measure_text(&title, None, text_size, 1.0f32);
-                if text_dim.width + TITLE_X_OFFSET > screen_width() {
-                    text_size -= 4;
-                } else {
-                    break;
-                }
+            if filename_font_size.is_none() {
+                filename_font_size = Some(INITIAL_FONT_SIZE);
+                loop {
+                    text_dim =
+                        measure_text(&title, None, *filename_font_size.as_ref().unwrap(), 1.0f32);
+                    if text_dim.width + TITLE_X_OFFSET > prev_width {
+                        filename_font_size = filename_font_size.map(|s| s - 4);
+                    } else {
+                        break;
+                    }
 
-                if text_size <= 4 {
-                    text_size = 4;
-                    break;
+                    if *filename_font_size.as_ref().unwrap() <= 4 {
+                        filename_font_size = Some(4);
+                        text_dim = measure_text(
+                            &title,
+                            None,
+                            *filename_font_size.as_ref().unwrap(),
+                            1.0f32,
+                        );
+                        break;
+                    }
                 }
             }
             draw_rectangle(
                 TITLE_X_OFFSET,
-                screen_height() - TITLE_Y_OFFSET - text_dim.height * 2.0,
+                prev_height - TITLE_Y_OFFSET - text_dim.height * 2.0,
                 text_dim.width,
                 text_dim.height,
                 Color::new(0.0, 0.0, 0.0, 0.4),
@@ -590,8 +664,8 @@ async fn main() -> Result<(), String> {
             draw_text(
                 &title,
                 TITLE_X_OFFSET,
-                screen_height() - TITLE_Y_OFFSET - text_dim.height,
-                text_size as f32,
+                prev_height - TITLE_Y_OFFSET - text_dim.height,
+                *filename_font_size.as_ref().unwrap() as f32,
                 WHITE,
             );
 
@@ -599,7 +673,7 @@ async fn main() -> Result<(), String> {
             let timer_dim = measure_text(&timer_string, None, 64, 1.0f32);
             draw_rectangle(
                 TIMER_X_OFFSET,
-                screen_height()
+                prev_height
                     - TITLE_Y_OFFSET
                     - text_dim.height
                     - TIMER_Y_OFFSET
@@ -611,11 +685,7 @@ async fn main() -> Result<(), String> {
             draw_text(
                 &timer_string,
                 TIMER_X_OFFSET,
-                screen_height()
-                    - TITLE_Y_OFFSET
-                    - text_dim.height
-                    - TIMER_Y_OFFSET
-                    - timer_dim.height,
+                prev_height - TITLE_Y_OFFSET - text_dim.height - TIMER_Y_OFFSET - timer_dim.height,
                 64.0f32,
                 WHITE,
             );
