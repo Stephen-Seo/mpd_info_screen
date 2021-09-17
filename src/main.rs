@@ -512,11 +512,11 @@ fn seconds_to_time(seconds: f64) -> String {
     if minutes > 0 {
         result = minutes.to_string();
         result.push(':');
+        if new_seconds < 10.0 {
+            result.push('0');
+        }
     } else {
         result = String::new();
-    }
-    if new_seconds < 10.0 && seconds >= 0.0 {
-        result.push('0');
     }
     result.push_str(&new_seconds.to_string());
     let idx_result = result.find('.');
