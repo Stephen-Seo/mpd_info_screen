@@ -11,12 +11,12 @@ use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
 const POLL_DURATION: Duration = Duration::from_secs(2);
-const TITLE_X_OFFSET: f32 = 20.0f32;
-const TITLE_Y_OFFSET: f32 = 20.0f32;
-const TIMER_X_OFFSET: f32 = 20.0f32;
-const TIMER_Y_OFFSET: f32 = 20.0f32;
+const TEXT_X_OFFSET: f32 = 16.0f32;
+const TEXT_Y_OFFSET: f32 = 16.0f32;
 const TIME_MAX_DIFF: f64 = 2.0f64;
 const INITIAL_FONT_SIZE: u16 = 96;
+const ARTIST_INITIAL_FONT_SIZE: u16 = 48;
+const TIMER_FONT_SIZE: u16 = 64;
 const SCREEN_DIFF_MARGIN: f32 = 1.0;
 
 #[derive(StructOpt, Debug)]
@@ -27,12 +27,20 @@ struct Opt {
     port: u16,
     #[structopt(short = "p")]
     password: Option<String>,
+    #[structopt(long = "disable-show-title")]
+    disable_show_title: bool,
+    #[structopt(long = "disable-show-artist")]
+    disable_show_artist: bool,
+    #[structopt(long = "disable-show-filename")]
+    disable_show_filename: bool,
 }
 
 struct Shared {
     art_data: Vec<u8>,
     art_data_size: usize,
-    current_song: String,
+    current_song_filename: String,
+    current_song_title: String,
+    current_song_artist: String,
     current_song_length: f64,
     current_song_position: f64,
     current_song_pos_rec: Instant,
@@ -51,7 +59,9 @@ impl Shared {
         Self {
             art_data: Vec::new(),
             art_data_size: 0,
-            current_song: String::new(),
+            current_song_filename: String::new(),
+            current_song_title: String::new(),
+            current_song_artist: String::new(),
             current_song_length: 0.0,
             current_song_position: 0.0,
             current_song_pos_rec: Instant::now(),
@@ -79,7 +89,9 @@ enum PollState {
 
 #[derive(Debug, Clone)]
 struct InfoFromShared {
+    filename: String,
     title: String,
+    artist: String,
     length: f64,
     pos: f64,
     instant_rec: Instant,
@@ -367,13 +379,15 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     poll_state = PollState::None;
                                 } else if line.starts_with("file: ") {
                                     let song_file = line.split_off(6);
-                                    if song_file != lock.current_song {
-                                        lock.current_song = song_file;
+                                    if song_file != lock.current_song_filename {
+                                        lock.current_song_filename = song_file;
                                         lock.art_data.clear();
                                         lock.art_data_size = 0;
                                         lock.can_get_album_art = true;
                                         lock.can_get_album_art_in_dir = true;
                                         //println!("Got different song file, clearing art_data...");
+                                        lock.current_song_title.clear();
+                                        lock.current_song_artist.clear();
                                     }
                                     lock.dirty = true;
                                     song_title_get_time = Instant::now();
@@ -406,6 +420,10 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     if let Ok(value) = parse_artbinarysize_result {
                                         current_binary_size = value;
                                     }
+                                } else if line.starts_with("Title: ") {
+                                    lock.current_song_title = line.split_off(7);
+                                } else if line.starts_with("Artist: ") {
+                                    lock.current_song_artist = line.split_off(8);
                                 }
                             }
                         } else if let Err((msg, read_line_in_progress)) = read_line_result {
@@ -452,9 +470,9 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                         poll_state = PollState::Status;
                     }
                 } else if (lock.art_data.is_empty() || lock.art_data.len() != lock.art_data_size)
-                    && !lock.current_song.is_empty()
+                    && !lock.current_song_filename.is_empty()
                 {
-                    let title = lock.current_song.clone();
+                    let title = lock.current_song_filename.clone();
                     let art_data_length = lock.art_data.len();
                     if lock.can_get_album_art {
                         let write_result = lock.stream.write(
@@ -464,6 +482,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                             println!("Got error requesting albumart: {}", e);
                         } else {
                             poll_state = PollState::ReadPicture;
+                            //println!("polling readpicture");
                         }
                     } else if lock.can_get_album_art_in_dir {
                         let write_result = lock.stream.write(
@@ -473,11 +492,12 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                             println!("Got error requesting albumart in dir: {}", e);
                         } else {
                             poll_state = PollState::ReadPictureInDir;
+                            //println!("polling readpictureindir");
                         }
                     }
                 }
             } else {
-                println!("Failed to acquire lock for writing to stream");
+                println!("INFO: Temporarily failed to acquire lock for writing to stream");
             }
         } else {
             // TODO DEBUG
@@ -493,18 +513,22 @@ fn get_info_from_shared(
     shared: Arc<Mutex<Shared>>,
     force_check: bool,
 ) -> Result<InfoFromShared, String> {
+    let mut filename: String = String::new();
     let mut title: String = String::new();
+    let mut artist: String = String::new();
     let mut length: f64 = 0.0;
     let mut pos: f64 = 0.0;
     let mut instant_rec: Instant = Instant::now();
     let mut error_text = String::new();
     if let Ok(mut lock) = shared.lock() {
         if lock.dirty || force_check {
-            title = lock.current_song.clone();
+            filename = lock.current_song_filename.clone();
+            title = lock.current_song_title.clone();
+            artist = lock.current_song_artist.clone();
             length = lock.current_song_length;
             pos = lock.current_song_position;
             instant_rec = lock.current_song_pos_rec;
-            //println!("Current song: {}", lock.current_song);
+            //println!("Current song: {}", lock.current_song_filename);
             //println!("Current song length: {}", lock.current_song_length);
             //println!("Current song position: {}", lock.current_song_position);
             if !lock.can_authenticate {
@@ -521,7 +545,9 @@ fn get_info_from_shared(
     }
 
     Ok(InfoFromShared {
+        filename,
         title,
+        artist,
         length,
         pos,
         instant_rec,
@@ -591,13 +617,20 @@ async fn main() -> Result<(), String> {
     let wait_time: f64 = 0.75;
     let mut timer: f64 = 0.0;
     let mut track_timer: f64 = 0.0;
+    let mut filename: String = String::new();
     let mut title: String = String::new();
+    let mut artist: String = String::new();
     let mut art_texture: Option<Texture2D> = None;
     let mut filename_font_size: Option<u16> = None;
     let mut text_dim: TextDimensions = measure_text("undefined", None, 24, 1.0);
     let mut prev_width = screen_width();
     let mut prev_height = screen_height();
     let mut error_text = String::new();
+    let mut title_dim_opt: Option<TextDimensions> = None;
+    let mut title_font_size: u16 = INITIAL_FONT_SIZE;
+    let mut artist_dim_opt: Option<TextDimensions> = None;
+    let mut artist_font_size: u16 = ARTIST_INITIAL_FONT_SIZE;
+    let mut temp_offset_y: f32;
 
     'macroquad_main: loop {
         let dt: f64 = get_frame_time() as f64;
@@ -611,6 +644,8 @@ async fn main() -> Result<(), String> {
             prev_width = screen_width();
             prev_height = screen_height();
             filename_font_size = None;
+            title_dim_opt = None;
+            artist_dim_opt = None;
         }
 
         timer -= dt;
@@ -619,10 +654,14 @@ async fn main() -> Result<(), String> {
             timer = wait_time;
             let info_result = get_info_from_shared(shared_data.clone(), false);
             if let Ok(info) = info_result {
-                if info.title != title {
-                    title = info.title;
+                if info.filename != filename {
+                    filename = info.filename;
                     art_texture = None;
                     filename_font_size = None;
+                    title.clear();
+                    title_dim_opt = None;
+                    artist.clear();
+                    artist_dim_opt = None;
                 }
                 let duration_since = info.instant_rec.elapsed();
                 let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
@@ -631,6 +670,12 @@ async fn main() -> Result<(), String> {
                 }
                 if !info.error_text.is_empty() {
                     error_text = info.error_text;
+                }
+                if !info.title.is_empty() {
+                    title = info.title;
+                }
+                if !info.artist.is_empty() {
+                    artist = info.artist;
                 }
             }
 
@@ -692,13 +737,18 @@ async fn main() -> Result<(), String> {
             }
         }
 
-        if !title.is_empty() {
+        temp_offset_y = 0.0;
+        if !filename.is_empty() && !opt.disable_show_filename {
             if filename_font_size.is_none() {
                 filename_font_size = Some(INITIAL_FONT_SIZE);
                 loop {
-                    text_dim =
-                        measure_text(&title, None, *filename_font_size.as_ref().unwrap(), 1.0f32);
-                    if text_dim.width + TITLE_X_OFFSET > prev_width {
+                    text_dim = measure_text(
+                        &filename,
+                        None,
+                        *filename_font_size.as_ref().unwrap(),
+                        1.0f32,
+                    );
+                    if text_dim.width + TEXT_X_OFFSET > prev_width {
                         filename_font_size = filename_font_size.map(|s| s - 4);
                     } else {
                         break;
@@ -707,7 +757,7 @@ async fn main() -> Result<(), String> {
                     if *filename_font_size.as_ref().unwrap() <= 4 {
                         filename_font_size = Some(4);
                         text_dim = measure_text(
-                            &title,
+                            &filename,
                             None,
                             *filename_font_size.as_ref().unwrap(),
                             1.0f32,
@@ -717,37 +767,123 @@ async fn main() -> Result<(), String> {
                 }
             }
             draw_rectangle(
-                TITLE_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET - text_dim.height,
+                TEXT_X_OFFSET,
+                prev_height - TEXT_Y_OFFSET - text_dim.height,
                 text_dim.width,
                 text_dim.height,
                 Color::new(0.0, 0.0, 0.0, 0.4),
             );
             draw_text(
-                &title,
-                TITLE_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET,
+                &filename,
+                TEXT_X_OFFSET,
+                prev_height - TEXT_Y_OFFSET,
                 *filename_font_size.as_ref().unwrap() as f32,
                 WHITE,
             );
 
-            let timer_string = seconds_to_time(track_timer);
-            let timer_dim = measure_text(&timer_string, None, 64, 1.0f32);
+            temp_offset_y += TEXT_Y_OFFSET + text_dim.height;
+        }
+
+        // Get title dimensions early so that artist size is at most title size
+        if !title.is_empty() && !opt.disable_show_title && title_dim_opt.is_none() {
+            title_font_size = INITIAL_FONT_SIZE;
+            loop {
+                title_dim_opt = Some(measure_text(&title, None, title_font_size, 1.0f32));
+                if title_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
+                    title_font_size -= 4;
+                    if title_font_size < 4 {
+                        title_font_size = 4;
+                        title_dim_opt = Some(measure_text(&title, None, title_font_size, 1.0f32));
+                        break;
+                    }
+                } else {
+                    break;
+                }
+            }
+        }
+
+        if !artist.is_empty() && !opt.disable_show_artist {
+            if artist_dim_opt.is_none() {
+                if !title.is_empty() && !opt.disable_show_title {
+                    artist_font_size = title_font_size;
+                } else {
+                    artist_font_size = ARTIST_INITIAL_FONT_SIZE;
+                }
+                loop {
+                    artist_dim_opt = Some(measure_text(&artist, None, artist_font_size, 1.0f32));
+                    if artist_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
+                        artist_font_size -= 4;
+                        if artist_font_size < 4 {
+                            artist_font_size = 4;
+                            artist_dim_opt =
+                                Some(measure_text(&artist, None, artist_font_size, 1.0f32));
+                            break;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            }
+
             draw_rectangle(
-                TIMER_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET - text_dim.height - TIMER_Y_OFFSET - timer_dim.height,
-                timer_dim.width,
-                timer_dim.height,
+                TEXT_X_OFFSET,
+                prev_height
+                    - temp_offset_y
+                    - TEXT_Y_OFFSET
+                    - artist_dim_opt.as_ref().unwrap().height,
+                artist_dim_opt.as_ref().unwrap().width,
+                artist_dim_opt.as_ref().unwrap().height,
                 Color::new(0.0, 0.0, 0.0, 0.4),
             );
             draw_text(
-                &timer_string,
-                TIMER_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET - text_dim.height - TIMER_Y_OFFSET,
-                64.0f32,
+                &artist,
+                TEXT_X_OFFSET,
+                prev_height - temp_offset_y - TEXT_Y_OFFSET,
+                artist_font_size.into(),
                 WHITE,
             );
+
+            temp_offset_y += TEXT_Y_OFFSET + artist_dim_opt.as_ref().unwrap().height;
         }
+
+        if !title.is_empty() && !opt.disable_show_title {
+            draw_rectangle(
+                TEXT_X_OFFSET,
+                prev_height
+                    - temp_offset_y
+                    - TEXT_Y_OFFSET
+                    - title_dim_opt.as_ref().unwrap().height,
+                title_dim_opt.as_ref().unwrap().width,
+                title_dim_opt.as_ref().unwrap().height,
+                Color::new(0.0, 0.0, 0.0, 0.4),
+            );
+            draw_text(
+                &title,
+                TEXT_X_OFFSET,
+                prev_height - temp_offset_y - TEXT_Y_OFFSET,
+                title_font_size.into(),
+                WHITE,
+            );
+
+            temp_offset_y += TEXT_Y_OFFSET + title_dim_opt.as_ref().unwrap().height;
+        }
+
+        let timer_string = seconds_to_time(track_timer);
+        let timer_dim = measure_text(&timer_string, None, TIMER_FONT_SIZE, 1.0f32);
+        draw_rectangle(
+            TEXT_X_OFFSET,
+            prev_height - temp_offset_y - TEXT_Y_OFFSET - timer_dim.height,
+            timer_dim.width,
+            timer_dim.height,
+            Color::new(0.0, 0.0, 0.0, 0.4),
+        );
+        draw_text(
+            &timer_string,
+            TEXT_X_OFFSET,
+            prev_height - temp_offset_y - TEXT_Y_OFFSET,
+            TIMER_FONT_SIZE.into(),
+            WHITE,
+        );
 
         if !error_text.is_empty() {
             draw_text(&error_text, 0.0, 32.0f32, 32.0f32, WHITE);
