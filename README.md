@@ -15,9 +15,10 @@ counter, and the filename currently being played
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
     
     FLAGS:
-            --disable-show-artist      
-            --disable-show-filename    
-            --disable-show-title       
+            --disable-show-artist      disable artist display
+            --disable-show-filename    disable filename display
+            --disable-show-title       disable title display
+            --pprompt                  input password via prompt
         -h, --help                     Prints help information
         -V, --version                  Prints version information
     

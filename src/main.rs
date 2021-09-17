@@ -18,6 +18,7 @@ const INITIAL_FONT_SIZE: u16 = 96;
 const ARTIST_INITIAL_FONT_SIZE: u16 = 48;
 const TIMER_FONT_SIZE: u16 = 64;
 const SCREEN_DIFF_MARGIN: f32 = 1.0;
+const PROMPT_Y_OFFSET: f32 = 48.0;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "mpd_info_screen")]
@@ -27,12 +28,14 @@ struct Opt {
     port: u16,
     #[structopt(short = "p")]
     password: Option<String>,
-    #[structopt(long = "disable-show-title")]
+    #[structopt(long = "disable-show-title", help = "disable title display")]
     disable_show_title: bool,
-    #[structopt(long = "disable-show-artist")]
+    #[structopt(long = "disable-show-artist", help = "disable artist display")]
     disable_show_artist: bool,
-    #[structopt(long = "disable-show-filename")]
+    #[structopt(long = "disable-show-filename", help = "disable filename display")]
     disable_show_filename: bool,
+    #[structopt(long = "pprompt", help = "input password via prompt")]
+    enable_prompt_password: bool,
 }
 
 struct Shared {
@@ -593,6 +596,50 @@ async fn main() -> Result<(), String> {
     let opt = Opt::from_args();
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
 
+    let mut password: Option<String> = opt.password;
+
+    if opt.enable_prompt_password {
+        let mut input: String = String::new();
+        let mut asterisks: String = String::new();
+        'prompt_loop: loop {
+            draw_text(
+                "Input password:",
+                TEXT_X_OFFSET,
+                TEXT_Y_OFFSET + PROMPT_Y_OFFSET,
+                PROMPT_Y_OFFSET,
+                WHITE,
+            );
+            if let Some(k) = get_last_key_pressed() {
+                if k == KeyCode::Backspace {
+                    input.pop();
+                } else if k == KeyCode::Enter {
+                    password = Some(input);
+                    break 'prompt_loop;
+                }
+            }
+            if let Some(c) = get_char_pressed() {
+                input.push(c);
+            }
+            let input_count = input.chars().count();
+            if asterisks.len() < input_count {
+                for _ in 0..(input_count - asterisks.len()) {
+                    asterisks.push('*');
+                }
+            } else {
+                asterisks.truncate(input_count);
+            }
+            draw_text(
+                &asterisks,
+                TEXT_X_OFFSET,
+                TEXT_Y_OFFSET + PROMPT_Y_OFFSET * 2.0,
+                PROMPT_Y_OFFSET,
+                WHITE,
+            );
+
+            next_frame().await
+        }
+    }
+
     let connection = get_connection(opt.host, opt.port)?;
     connection
         .set_read_timeout(Some(Duration::from_millis(50)))
@@ -602,7 +649,7 @@ async fn main() -> Result<(), String> {
         .expect("Should be able to set timeout for TcpStream writes");
 
     let shared_data = Arc::new(Mutex::new(Shared::new(connection)));
-    if let Some(p) = opt.password {
+    if let Some(p) = password {
         shared_data
             .lock()
             .expect("Should be able to get mutex lock")
