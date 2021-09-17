@@ -12,11 +12,14 @@ counter, and the filename currently being played
     mpd_info_screen 0.1.0
     
     USAGE:
-        mpd_info_screen [OPTIONS] <host> [port]
+        mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
     
     FLAGS:
-        -h, --help       Prints help information
-        -V, --version    Prints version information
+            --disable-show-artist      
+            --disable-show-filename    
+            --disable-show-title       
+        -h, --help                     Prints help information
+        -V, --version                  Prints version information
     
     OPTIONS:
         -p <password>        
