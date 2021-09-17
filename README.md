@@ -34,7 +34,7 @@ program.
 ([macroquad](https://crates.io/crates/macroquad) is being used to display a
 window, text, and album art, but doesn't seem to have support for ".ttc" fonts
 that could render CJK text)  
-- [ ] Support for album art not embedded but in the same directory
+- [x] Support for album art not embedded but in the same directory
 
 # Legal stuff
 

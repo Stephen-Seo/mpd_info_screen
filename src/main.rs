@@ -42,6 +42,7 @@ struct Shared {
     dirty: bool,
     can_authenticate: bool,
     can_get_album_art: bool,
+    can_get_album_art_in_dir: bool,
     can_get_status: bool,
 }
 
@@ -60,6 +61,7 @@ impl Shared {
             dirty: true,
             can_authenticate: true,
             can_get_album_art: true,
+            can_get_album_art_in_dir: true,
             can_get_status: true,
         }
     }
@@ -72,6 +74,7 @@ enum PollState {
     CurrentSong,
     Status,
     ReadPicture,
+    ReadPictureInDir,
 }
 
 #[derive(Debug, Clone)]
@@ -320,6 +323,20 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 if line.starts_with("OK") {
                                     match poll_state {
                                         PollState::Password => authenticated = true,
+                                        PollState::ReadPicture => {
+                                            if lock.art_data.is_empty() {
+                                                lock.can_get_album_art = false;
+                                                lock.dirty = true;
+                                                println!("No embedded album art");
+                                            }
+                                        }
+                                        PollState::ReadPictureInDir => {
+                                            if lock.art_data.is_empty() {
+                                                lock.can_get_album_art_in_dir = false;
+                                                lock.dirty = true;
+                                                println!("No album art in dir");
+                                            }
+                                        }
                                         _ => (),
                                     }
                                     poll_state = PollState::None;
@@ -338,6 +355,12 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         PollState::ReadPicture => {
                                             lock.can_get_album_art = false;
                                             lock.dirty = true;
+                                            println!("Failed to get readpicture");
+                                        }
+                                        PollState::ReadPictureInDir => {
+                                            lock.can_get_album_art_in_dir = false;
+                                            lock.dirty = true;
+                                            println!("Failed to get albumart");
                                         }
                                         _ => (),
                                     }
@@ -348,6 +371,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         lock.current_song = song_file;
                                         lock.art_data.clear();
                                         lock.art_data_size = 0;
+                                        lock.can_get_album_art = true;
+                                        lock.can_get_album_art_in_dir = true;
                                         //println!("Got different song file, clearing art_data...");
                                     }
                                     lock.dirty = true;
@@ -428,17 +453,27 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     }
                 } else if (lock.art_data.is_empty() || lock.art_data.len() != lock.art_data_size)
                     && !lock.current_song.is_empty()
-                    && lock.can_get_album_art
                 {
                     let title = lock.current_song.clone();
                     let art_data_length = lock.art_data.len();
-                    let write_result = lock.stream.write(
-                        format!("readpicture \"{}\" {}\n", title, art_data_length).as_bytes(),
-                    );
-                    if let Err(e) = write_result {
-                        println!("Got error requesting albumart: {}", e);
-                    } else {
-                        poll_state = PollState::ReadPicture;
+                    if lock.can_get_album_art {
+                        let write_result = lock.stream.write(
+                            format!("readpicture \"{}\" {}\n", title, art_data_length).as_bytes(),
+                        );
+                        if let Err(e) = write_result {
+                            println!("Got error requesting albumart: {}", e);
+                        } else {
+                            poll_state = PollState::ReadPicture;
+                        }
+                    } else if lock.can_get_album_art_in_dir {
+                        let write_result = lock.stream.write(
+                            format!("albumart \"{}\" {}\n", title, art_data_length).as_bytes(),
+                        );
+                        if let Err(e) = write_result {
+                            println!("Got error requesting albumart in dir: {}", e);
+                        } else {
+                            poll_state = PollState::ReadPictureInDir;
+                        }
                     }
                 }
             } else {
@@ -476,7 +511,7 @@ fn get_info_from_shared(
                 error_text = String::from("Failed to authenticate to mpd");
             } else if !lock.can_get_status {
                 error_text = String::from("Failed to get status from mpd");
-            } else if !lock.can_get_album_art {
+            } else if !lock.can_get_album_art && !lock.can_get_album_art_in_dir {
                 error_text = String::from("Failed to get albumart from mpd");
             }
             lock.dirty = false;
