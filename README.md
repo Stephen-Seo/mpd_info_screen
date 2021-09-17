@@ -1,6 +1,6 @@
 # mpd info screen
 
-![mpd info screen preview image](https://git.seodisparate.com/stephenseo/mpd_info_screen/raw/commit/fbad1ebecc07f0b17953af155d9049214e473b82/images/mpd_info_screen_preview_image.jpg)
+![mpd info screen preview image](https://git.seodisparate.com/stephenseo/mpd_info_screen/raw/branch/images/images/mpd_info_screen_preview_image.jpg)
 
 A Rust program that displays info about the currently running MPD server.
 
