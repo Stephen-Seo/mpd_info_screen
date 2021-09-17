@@ -32,6 +32,8 @@ counter, and the filename currently being played
 Note that Escape key and Q key pressed when the window is focused closes the
 program.
 
+Also, the "H" key hides the drawn text while it is pressed.
+
 # Issues / TODO
 
 - [ ] UTF-8 Non-ascii font support
