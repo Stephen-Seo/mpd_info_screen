@@ -10,6 +10,7 @@ use std::thread;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
+const BUF_SIZE: usize = 1024 * 4;
 const POLL_DURATION: Duration = Duration::from_secs(2);
 const TEXT_X_OFFSET: f32 = 16.0f32;
 const TEXT_Y_OFFSET: f32 = 16.0f32;
@@ -267,7 +268,7 @@ fn read_line(
 //}
 
 fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
-    let mut buf: [u8; 4192] = [0; 4192];
+    let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
     let mut init: bool = true;
     let mut saved: Vec<u8> = Vec::new();
     let mut saved_str: String = String::new();
@@ -292,8 +293,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
             if let Ok(mut lock) = lock_result {
                 let read_result = lock.stream.read(&mut buf);
                 if let Ok(count) = read_result {
-                    let mut read_vec: Vec<u8> = Vec::from(buf);
-                    read_vec.resize(count, 0);
+                    let mut read_vec: Vec<u8> = Vec::from(&buf[0..count]);
                     loop {
                         let mut count = read_vec.len();
                         if current_binary_size > 0 {
@@ -784,86 +784,65 @@ async fn main() -> Result<(), String> {
             }
         }
 
-        temp_offset_y = 0.0;
-        if !filename.is_empty() && !opt.disable_show_filename {
-            if filename_font_size.is_none() {
-                filename_font_size = Some(INITIAL_FONT_SIZE);
-                loop {
-                    text_dim = measure_text(
-                        &filename,
-                        None,
-                        *filename_font_size.as_ref().unwrap(),
-                        1.0f32,
-                    );
-                    if text_dim.width + TEXT_X_OFFSET > prev_width {
-                        filename_font_size = filename_font_size.map(|s| s - 4);
-                    } else {
-                        break;
-                    }
-
-                    if *filename_font_size.as_ref().unwrap() <= 4 {
-                        filename_font_size = Some(4);
+        if !is_key_down(KeyCode::H) {
+            temp_offset_y = 0.0;
+            if !filename.is_empty() && !opt.disable_show_filename {
+                if filename_font_size.is_none() {
+                    filename_font_size = Some(INITIAL_FONT_SIZE);
+                    loop {
                         text_dim = measure_text(
                             &filename,
                             None,
                             *filename_font_size.as_ref().unwrap(),
                             1.0f32,
                         );
-                        break;
+                        if text_dim.width + TEXT_X_OFFSET > prev_width {
+                            filename_font_size = filename_font_size.map(|s| s - 4);
+                        } else {
+                            break;
+                        }
+
+                        if *filename_font_size.as_ref().unwrap() <= 4 {
+                            filename_font_size = Some(4);
+                            text_dim = measure_text(
+                                &filename,
+                                None,
+                                *filename_font_size.as_ref().unwrap(),
+                                1.0f32,
+                            );
+                            break;
+                        }
                     }
                 }
+                draw_rectangle(
+                    TEXT_X_OFFSET,
+                    prev_height - TEXT_Y_OFFSET - text_dim.height,
+                    text_dim.width,
+                    text_dim.height,
+                    Color::new(0.0, 0.0, 0.0, 0.4),
+                );
+                draw_text(
+                    &filename,
+                    TEXT_X_OFFSET,
+                    prev_height - TEXT_Y_OFFSET,
+                    *filename_font_size.as_ref().unwrap() as f32,
+                    WHITE,
+                );
+
+                temp_offset_y += TEXT_Y_OFFSET + text_dim.height;
             }
-            draw_rectangle(
-                TEXT_X_OFFSET,
-                prev_height - TEXT_Y_OFFSET - text_dim.height,
-                text_dim.width,
-                text_dim.height,
-                Color::new(0.0, 0.0, 0.0, 0.4),
-            );
-            draw_text(
-                &filename,
-                TEXT_X_OFFSET,
-                prev_height - TEXT_Y_OFFSET,
-                *filename_font_size.as_ref().unwrap() as f32,
-                WHITE,
-            );
 
-            temp_offset_y += TEXT_Y_OFFSET + text_dim.height;
-        }
-
-        // Get title dimensions early so that artist size is at most title size
-        if !title.is_empty() && !opt.disable_show_title && title_dim_opt.is_none() {
-            title_font_size = INITIAL_FONT_SIZE;
-            loop {
-                title_dim_opt = Some(measure_text(&title, None, title_font_size, 1.0f32));
-                if title_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
-                    title_font_size -= 4;
-                    if title_font_size < 4 {
-                        title_font_size = 4;
-                        title_dim_opt = Some(measure_text(&title, None, title_font_size, 1.0f32));
-                        break;
-                    }
-                } else {
-                    break;
-                }
-            }
-        }
-
-        if !artist.is_empty() && !opt.disable_show_artist {
-            if artist_dim_opt.is_none() {
-                if !title.is_empty() && !opt.disable_show_title {
-                    artist_font_size = title_font_size;
-                } else {
-                    artist_font_size = ARTIST_INITIAL_FONT_SIZE;
-                }
+            // Get title dimensions early so that artist size is at most title size
+            if !title.is_empty() && !opt.disable_show_title && title_dim_opt.is_none() {
+                title_font_size = INITIAL_FONT_SIZE;
                 loop {
-                    artist_dim_opt = Some(measure_text(&artist, None, artist_font_size, 1.0f32));
-                    if artist_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
-                        artist_font_size -= 4;
-                        if artist_font_size < 4 {
-                            artist_font_size = 4;
-                            artist_dim_opt =
-                                Some(measure_text(&artist, None, artist_font_size, 1.0f32));
+                    title_dim_opt = Some(measure_text(&title, None, title_font_size, 1.0f32));
+                    if title_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
+                        title_font_size -= 4;
+                        if title_font_size < 4 {
+                            title_font_size = 4;
+                            title_dim_opt =
+                                Some(measure_text(&title, None, title_font_size, 1.0f32));
                             break;
                         }
                     } else {
@@ -872,68 +851,93 @@ async fn main() -> Result<(), String> {
                 }
             }
 
+            if !artist.is_empty() && !opt.disable_show_artist {
+                if artist_dim_opt.is_none() {
+                    if !title.is_empty() && !opt.disable_show_title {
+                        artist_font_size = title_font_size;
+                    } else {
+                        artist_font_size = ARTIST_INITIAL_FONT_SIZE;
+                    }
+                    loop {
+                        artist_dim_opt =
+                            Some(measure_text(&artist, None, artist_font_size, 1.0f32));
+                        if artist_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
+                            artist_font_size -= 4;
+                            if artist_font_size < 4 {
+                                artist_font_size = 4;
+                                artist_dim_opt =
+                                    Some(measure_text(&artist, None, artist_font_size, 1.0f32));
+                                break;
+                            }
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                draw_rectangle(
+                    TEXT_X_OFFSET,
+                    prev_height
+                        - temp_offset_y
+                        - TEXT_Y_OFFSET
+                        - artist_dim_opt.as_ref().unwrap().height,
+                    artist_dim_opt.as_ref().unwrap().width,
+                    artist_dim_opt.as_ref().unwrap().height,
+                    Color::new(0.0, 0.0, 0.0, 0.4),
+                );
+                draw_text(
+                    &artist,
+                    TEXT_X_OFFSET,
+                    prev_height - temp_offset_y - TEXT_Y_OFFSET,
+                    artist_font_size.into(),
+                    WHITE,
+                );
+
+                temp_offset_y += TEXT_Y_OFFSET + artist_dim_opt.as_ref().unwrap().height;
+            }
+
+            if !title.is_empty() && !opt.disable_show_title {
+                draw_rectangle(
+                    TEXT_X_OFFSET,
+                    prev_height
+                        - temp_offset_y
+                        - TEXT_Y_OFFSET
+                        - title_dim_opt.as_ref().unwrap().height,
+                    title_dim_opt.as_ref().unwrap().width,
+                    title_dim_opt.as_ref().unwrap().height,
+                    Color::new(0.0, 0.0, 0.0, 0.4),
+                );
+                draw_text(
+                    &title,
+                    TEXT_X_OFFSET,
+                    prev_height - temp_offset_y - TEXT_Y_OFFSET,
+                    title_font_size.into(),
+                    WHITE,
+                );
+
+                temp_offset_y += TEXT_Y_OFFSET + title_dim_opt.as_ref().unwrap().height;
+            }
+
+            let timer_string = seconds_to_time(track_timer);
+            let timer_dim = measure_text(&timer_string, None, TIMER_FONT_SIZE, 1.0f32);
             draw_rectangle(
                 TEXT_X_OFFSET,
-                prev_height
-                    - temp_offset_y
-                    - TEXT_Y_OFFSET
-                    - artist_dim_opt.as_ref().unwrap().height,
-                artist_dim_opt.as_ref().unwrap().width,
-                artist_dim_opt.as_ref().unwrap().height,
+                prev_height - temp_offset_y - TEXT_Y_OFFSET - timer_dim.height,
+                timer_dim.width,
+                timer_dim.height,
                 Color::new(0.0, 0.0, 0.0, 0.4),
             );
             draw_text(
-                &artist,
+                &timer_string,
                 TEXT_X_OFFSET,
                 prev_height - temp_offset_y - TEXT_Y_OFFSET,
-                artist_font_size.into(),
+                TIMER_FONT_SIZE.into(),
                 WHITE,
             );
 
-            temp_offset_y += TEXT_Y_OFFSET + artist_dim_opt.as_ref().unwrap().height;
-        }
-
-        if !title.is_empty() && !opt.disable_show_title {
-            draw_rectangle(
-                TEXT_X_OFFSET,
-                prev_height
-                    - temp_offset_y
-                    - TEXT_Y_OFFSET
-                    - title_dim_opt.as_ref().unwrap().height,
-                title_dim_opt.as_ref().unwrap().width,
-                title_dim_opt.as_ref().unwrap().height,
-                Color::new(0.0, 0.0, 0.0, 0.4),
-            );
-            draw_text(
-                &title,
-                TEXT_X_OFFSET,
-                prev_height - temp_offset_y - TEXT_Y_OFFSET,
-                title_font_size.into(),
-                WHITE,
-            );
-
-            temp_offset_y += TEXT_Y_OFFSET + title_dim_opt.as_ref().unwrap().height;
-        }
-
-        let timer_string = seconds_to_time(track_timer);
-        let timer_dim = measure_text(&timer_string, None, TIMER_FONT_SIZE, 1.0f32);
-        draw_rectangle(
-            TEXT_X_OFFSET,
-            prev_height - temp_offset_y - TEXT_Y_OFFSET - timer_dim.height,
-            timer_dim.width,
-            timer_dim.height,
-            Color::new(0.0, 0.0, 0.0, 0.4),
-        );
-        draw_text(
-            &timer_string,
-            TEXT_X_OFFSET,
-            prev_height - temp_offset_y - TEXT_Y_OFFSET,
-            TIMER_FONT_SIZE.into(),
-            WHITE,
-        );
-
-        if !error_text.is_empty() {
-            draw_text(&error_text, 0.0, 32.0f32, 32.0f32, WHITE);
+            if !error_text.is_empty() {
+                draw_text(&error_text, 0.0, 32.0f32, 32.0f32, WHITE);
+            }
         }
 
         next_frame().await
