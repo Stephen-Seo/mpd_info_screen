@@ -80,6 +80,7 @@ struct InfoFromShared {
     length: f64,
     pos: f64,
     instant_rec: Instant,
+    error_text: String,
 }
 
 fn get_connection(host: Ipv4Addr, port: u16) -> Result<TcpStream, String> {
@@ -285,6 +286,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 count = read_vec.len();
                                 current_binary_size = 0;
                                 poll_state = PollState::None;
+                                lock.dirty = true;
                                 //println!(
                                 //    "art_data len is {} after fully reading",
                                 //    lock.art_data.len()
@@ -316,16 +318,27 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                             } else {
                                 //println!("Got response: {}", line);
                                 if line.starts_with("OK") {
+                                    match poll_state {
+                                        PollState::Password => authenticated = true,
+                                        _ => (),
+                                    }
                                     poll_state = PollState::None;
                                     break;
                                 } else if line.starts_with("ACK") {
                                     println!("ERROR: {}", line);
                                     match poll_state {
-                                        PollState::Password => lock.can_authenticate = false,
-                                        PollState::CurrentSong | PollState::Status => {
-                                            lock.can_get_status = false
+                                        PollState::Password => {
+                                            lock.can_authenticate = false;
+                                            lock.dirty = true;
                                         }
-                                        PollState::ReadPicture => lock.can_get_album_art = false,
+                                        PollState::CurrentSong | PollState::Status => {
+                                            lock.can_get_status = false;
+                                            lock.dirty = true;
+                                        }
+                                        PollState::ReadPicture => {
+                                            lock.can_get_album_art = false;
+                                            lock.dirty = true;
+                                        }
                                         _ => (),
                                     }
                                     poll_state = PollState::None;
@@ -392,7 +405,6 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     let p = lock.password.clone();
                     let write_result = lock.stream.write(format!("password {}\n", p).as_bytes());
                     if write_result.is_ok() {
-                        authenticated = true;
                         poll_state = PollState::Password;
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
@@ -450,6 +462,7 @@ fn get_info_from_shared(
     let mut length: f64 = 0.0;
     let mut pos: f64 = 0.0;
     let mut instant_rec: Instant = Instant::now();
+    let mut error_text = String::new();
     if let Ok(mut lock) = shared.lock() {
         if lock.dirty || force_check {
             title = lock.current_song.clone();
@@ -459,7 +472,16 @@ fn get_info_from_shared(
             //println!("Current song: {}", lock.current_song);
             //println!("Current song length: {}", lock.current_song_length);
             //println!("Current song position: {}", lock.current_song_position);
+            if !lock.can_authenticate {
+                error_text = String::from("Failed to authenticate to mpd");
+            } else if !lock.can_get_status {
+                error_text = String::from("Failed to get status from mpd");
+            } else if !lock.can_get_album_art {
+                error_text = String::from("Failed to get albumart from mpd");
+            }
             lock.dirty = false;
+        } else {
+            return Err(String::from("not dirty and force_check is off"));
         }
     }
 
@@ -468,6 +490,7 @@ fn get_info_from_shared(
         length,
         pos,
         instant_rec,
+        error_text,
     })
 }
 
@@ -539,6 +562,7 @@ async fn main() -> Result<(), String> {
     let mut text_dim: TextDimensions = measure_text("undefined", None, 24, 1.0);
     let mut prev_width = screen_width();
     let mut prev_height = screen_height();
+    let mut error_text = String::new();
 
     'macroquad_main: loop {
         let dt: f64 = get_frame_time() as f64;
@@ -558,7 +582,7 @@ async fn main() -> Result<(), String> {
         track_timer -= dt;
         if timer < 0.0 || track_timer < 0.0 {
             timer = wait_time;
-            let info_result = get_info_from_shared(shared_data.clone(), true);
+            let info_result = get_info_from_shared(shared_data.clone(), false);
             if let Ok(info) = info_result {
                 if info.title != title {
                     title = info.title;
@@ -569,6 +593,9 @@ async fn main() -> Result<(), String> {
                 let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
                 if (recorded_time - track_timer).abs() > TIME_MAX_DIFF {
                     track_timer = info.length - info.pos - duration_since.as_secs_f64();
+                }
+                if !info.error_text.is_empty() {
+                    error_text = info.error_text;
                 }
             }
 
@@ -691,6 +718,10 @@ async fn main() -> Result<(), String> {
             );
         }
 
+        if !error_text.is_empty() {
+            draw_text(&error_text, 0.0, 32.0f32, 32.0f32, WHITE);
+        }
+
         next_frame().await
     }
 
@@ -706,8 +737,8 @@ async fn main() -> Result<(), String> {
     println!("Joining on thread...");
     child.join().expect("Should be able to join on thread");
 
-    get_info_from_shared(shared_data.clone(), true)
-        .expect("Should be able to get info from shared");
+    //get_info_from_shared(shared_data.clone(), true)
+    //    .expect("Should be able to get info from shared");
 
     Ok(())
 }
