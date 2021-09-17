@@ -683,7 +683,7 @@ async fn main() -> Result<(), String> {
             }
             draw_rectangle(
                 TITLE_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET - text_dim.height * 2.0,
+                prev_height - TITLE_Y_OFFSET - text_dim.height,
                 text_dim.width,
                 text_dim.height,
                 Color::new(0.0, 0.0, 0.0, 0.4),
@@ -691,7 +691,7 @@ async fn main() -> Result<(), String> {
             draw_text(
                 &title,
                 TITLE_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET - text_dim.height,
+                prev_height - TITLE_Y_OFFSET,
                 *filename_font_size.as_ref().unwrap() as f32,
                 WHITE,
             );
@@ -700,11 +700,7 @@ async fn main() -> Result<(), String> {
             let timer_dim = measure_text(&timer_string, None, 64, 1.0f32);
             draw_rectangle(
                 TIMER_X_OFFSET,
-                prev_height
-                    - TITLE_Y_OFFSET
-                    - text_dim.height
-                    - TIMER_Y_OFFSET
-                    - timer_dim.height * 2.0,
+                prev_height - TITLE_Y_OFFSET - text_dim.height - TIMER_Y_OFFSET - timer_dim.height,
                 timer_dim.width,
                 timer_dim.height,
                 Color::new(0.0, 0.0, 0.0, 0.4),
@@ -712,7 +708,7 @@ async fn main() -> Result<(), String> {
             draw_text(
                 &timer_string,
                 TIMER_X_OFFSET,
-                prev_height - TITLE_Y_OFFSET - text_dim.height - TIMER_Y_OFFSET - timer_dim.height,
+                prev_height - TITLE_Y_OFFSET - text_dim.height - TIMER_Y_OFFSET,
                 64.0f32,
                 WHITE,
             );
