@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
 const BUF_SIZE: usize = 1024 * 4;
-const POLL_DURATION: Duration = Duration::from_secs(2);
+const POLL_DURATION: Duration = Duration::from_secs(10);
 const TEXT_X_OFFSET: f32 = 16.0f32;
 const TEXT_Y_OFFSET: f32 = 16.0f32;
 const TIME_MAX_DIFF: f64 = 2.0f64;
@@ -20,6 +20,7 @@ const ARTIST_INITIAL_FONT_SIZE: u16 = 48;
 const TIMER_FONT_SIZE: u16 = 64;
 const SCREEN_DIFF_MARGIN: f32 = 1.0;
 const PROMPT_Y_OFFSET: f32 = 48.0;
+const CHECK_SHARED_WAIT_TIME: f64 = 2.0;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "mpd_info_screen")]
@@ -56,6 +57,7 @@ struct Shared {
     can_get_album_art: bool,
     can_get_album_art_in_dir: bool,
     can_get_status: bool,
+    force_check: bool,
 }
 
 impl Shared {
@@ -77,6 +79,7 @@ impl Shared {
             can_get_album_art: true,
             can_get_album_art_in_dir: true,
             can_get_status: true,
+            force_check: true,
         }
     }
 }
@@ -439,7 +442,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     }
                 }
             } else {
-                println!("Failed to acquire lock for reading to stream");
+                println!("INFO: Temporarily failed to acquire lock for reading from tcp stream");
             }
         }
 
@@ -455,12 +458,13 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
                     }
-                } else if song_title_get_time.elapsed() > POLL_DURATION && lock.can_get_status {
+                } else if (song_title_get_time.elapsed() > POLL_DURATION || lock.force_check) && lock.can_get_status {
                     let write_result = lock.stream.write(b"currentsong\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting currentsong info: {}", e);
                     } else {
                         poll_state = PollState::CurrentSong;
+                        lock.force_check = false;
                     }
                 } else if (song_length_get_time.elapsed() > POLL_DURATION
                     || song_pos_get_time.elapsed() > POLL_DURATION)
@@ -500,7 +504,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     }
                 }
             } else {
-                println!("INFO: Temporarily failed to acquire lock for writing to stream");
+                println!("INFO: Temporarily failed to acquire lock for writing to tcp stream");
             }
         } else {
             // TODO DEBUG
@@ -515,6 +519,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
 fn get_info_from_shared(
     shared: Arc<Mutex<Shared>>,
     force_check: bool,
+    set_force_check: bool,
 ) -> Result<InfoFromShared, String> {
     let mut filename: String = String::new();
     let mut title: String = String::new();
@@ -524,6 +529,9 @@ fn get_info_from_shared(
     let mut instant_rec: Instant = Instant::now();
     let mut error_text = String::new();
     if let Ok(mut lock) = shared.lock() {
+        if set_force_check {
+            lock.force_check = true;
+        }
         if lock.dirty || force_check {
             filename = lock.current_song_filename.clone();
             title = lock.current_song_title.clone();
@@ -601,6 +609,7 @@ async fn main() -> Result<(), String> {
     if opt.enable_prompt_password {
         let mut input: String = String::new();
         let mut asterisks: String = String::new();
+        let mut dirty: bool = true;
         'prompt_loop: loop {
             draw_text(
                 "Input password:",
@@ -612,6 +621,7 @@ async fn main() -> Result<(), String> {
             if let Some(k) = get_last_key_pressed() {
                 if k == KeyCode::Backspace {
                     input.pop();
+                    dirty = true;
                 } else if k == KeyCode::Enter {
                     password = Some(input);
                     break 'prompt_loop;
@@ -619,14 +629,18 @@ async fn main() -> Result<(), String> {
             }
             if let Some(c) = get_char_pressed() {
                 input.push(c);
+                dirty = true;
             }
-            let input_count = input.chars().count();
-            if asterisks.len() < input_count {
-                for _ in 0..(input_count - asterisks.len()) {
-                    asterisks.push('*');
+            if dirty {
+                let input_count = input.chars().count();
+                if asterisks.len() < input_count {
+                    for _ in 0..(input_count - asterisks.len()) {
+                        asterisks.push('*');
+                    }
+                } else {
+                    asterisks.truncate(input_count);
                 }
-            } else {
-                asterisks.truncate(input_count);
+                dirty = false;
             }
             draw_text(
                 &asterisks,
@@ -661,13 +675,15 @@ async fn main() -> Result<(), String> {
         info_loop(thread_shared_data).expect("Failure during info_loop");
     });
 
-    let wait_time: f64 = 0.75;
     let mut timer: f64 = 0.0;
     let mut track_timer: f64 = 0.0;
     let mut filename: String = String::new();
     let mut title: String = String::new();
     let mut artist: String = String::new();
     let mut art_texture: Option<Texture2D> = None;
+    let mut art_draw_params: Option<DrawTextureParams> = None;
+    let mut art_draw_width: f32 = 32.0;
+    let mut art_draw_height: f32 = 32.0;
     let mut filename_font_size: Option<u16> = None;
     let mut text_dim: TextDimensions = measure_text("undefined", None, 24, 1.0);
     let mut prev_width = screen_width();
@@ -693,13 +709,14 @@ async fn main() -> Result<(), String> {
             filename_font_size = None;
             title_dim_opt = None;
             artist_dim_opt = None;
+            art_draw_params = None;
         }
 
         timer -= dt;
         track_timer -= dt;
         if timer < 0.0 || track_timer < 0.0 {
-            timer = wait_time;
-            let info_result = get_info_from_shared(shared_data.clone(), false);
+            timer = CHECK_SHARED_WAIT_TIME;
+            let info_result = get_info_from_shared(shared_data.clone(), false, track_timer < 0.0);
             if let Ok(info) = info_result {
                 if info.filename != filename {
                     filename = info.filename;
@@ -709,6 +726,7 @@ async fn main() -> Result<(), String> {
                     title_dim_opt = None;
                     artist.clear();
                     artist_dim_opt = None;
+                    art_draw_params = None;
                 }
                 let duration_since = info.instant_rec.elapsed();
                 let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
@@ -753,26 +771,28 @@ async fn main() -> Result<(), String> {
 
         if let Some(texture) = art_texture {
             if texture.width() > prev_width || texture.height() > prev_height {
-                let ratio: f32 = texture.width() / texture.height();
-                // try filling to height
-                let mut height = prev_height;
-                let mut width = prev_height * ratio;
-                if width > prev_width {
-                    // try filling to width instead
-                    width = prev_width;
-                    height = prev_width / ratio;
-                }
+                if art_draw_params.is_none() {
+                    let ratio: f32 = texture.width() / texture.height();
+                    // try filling to height
+                    art_draw_height = prev_height;
+                    art_draw_width = prev_height * ratio;
+                    if art_draw_width > prev_width {
+                        // try filling to width instead
+                        art_draw_width = prev_width;
+                        art_draw_height = prev_width / ratio;
+                    }
 
-                let draw_params: DrawTextureParams = DrawTextureParams {
-                    dest_size: Some(Vec2::new(width, height)),
-                    ..Default::default()
-                };
+                    art_draw_params = Some(DrawTextureParams {
+                        dest_size: Some(Vec2::new(art_draw_width, art_draw_height)),
+                        ..Default::default()
+                    });
+                }
                 draw_texture_ex(
                     texture,
-                    (prev_width - width) / 2.0f32,
-                    (prev_height - height) / 2.0f32,
+                    (prev_width - art_draw_width) / 2.0f32,
+                    (prev_height - art_draw_height) / 2.0f32,
                     WHITE,
-                    draw_params,
+                    art_draw_params.as_ref().unwrap().clone(),
                 );
             } else {
                 draw_texture(
