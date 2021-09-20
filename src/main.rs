@@ -928,14 +928,12 @@ async fn main() -> Result<(), String> {
                     }
                 }
 
+                let temp_dim_opt = artist_dim_opt.as_ref().unwrap();
                 draw_rectangle(
                     TEXT_X_OFFSET,
-                    prev_height
-                        - temp_offset_y
-                        - TEXT_Y_OFFSET
-                        - artist_dim_opt.as_ref().unwrap().height,
-                    artist_dim_opt.as_ref().unwrap().width,
-                    artist_dim_opt.as_ref().unwrap().height,
+                    prev_height - temp_offset_y - TEXT_Y_OFFSET - temp_dim_opt.height,
+                    temp_dim_opt.width,
+                    temp_dim_opt.height,
                     Color::new(0.0, 0.0, 0.0, 0.4),
                 );
                 draw_text(
@@ -946,18 +944,16 @@ async fn main() -> Result<(), String> {
                     WHITE,
                 );
 
-                temp_offset_y += TEXT_Y_OFFSET + artist_dim_opt.as_ref().unwrap().height;
+                temp_offset_y += TEXT_Y_OFFSET + temp_dim_opt.height;
             }
 
             if !title.is_empty() && !opt.disable_show_title {
+                let temp_dim_opt = title_dim_opt.as_ref().unwrap();
                 draw_rectangle(
                     TEXT_X_OFFSET,
-                    prev_height
-                        - temp_offset_y
-                        - TEXT_Y_OFFSET
-                        - title_dim_opt.as_ref().unwrap().height,
-                    title_dim_opt.as_ref().unwrap().width,
-                    title_dim_opt.as_ref().unwrap().height,
+                    prev_height - temp_offset_y - TEXT_Y_OFFSET - temp_dim_opt.height,
+                    temp_dim_opt.width,
+                    temp_dim_opt.height,
                     Color::new(0.0, 0.0, 0.0, 0.4),
                 );
                 draw_text(
@@ -968,7 +964,7 @@ async fn main() -> Result<(), String> {
                     WHITE,
                 );
 
-                temp_offset_y += TEXT_Y_OFFSET + title_dim_opt.as_ref().unwrap().height;
+                temp_offset_y += TEXT_Y_OFFSET + temp_dim_opt.height;
             }
 
             let timer_string = seconds_to_time(track_timer);
