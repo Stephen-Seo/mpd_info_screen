@@ -16,11 +16,14 @@ const TEXT_X_OFFSET: f32 = 16.0f32;
 const TEXT_Y_OFFSET: f32 = 16.0f32;
 const TIME_MAX_DIFF: f64 = 2.0f64;
 const INITIAL_FONT_SIZE: u16 = 96;
+const TITLE_INITIAL_FONT_SIZE: u16 = 64;
+const TITLE_INITIAL_MIN_FONT_SIZE: u16 = 40;
 const ARTIST_INITIAL_FONT_SIZE: u16 = 48;
 const TIMER_FONT_SIZE: u16 = 64;
 const SCREEN_DIFF_MARGIN: f32 = 1.0;
 const PROMPT_Y_OFFSET: f32 = 48.0;
 const CHECK_SHARED_WAIT_TIME: f64 = 2.0;
+const CHECK_TRACK_TIMER_MAX_COUNT: u64 = 30;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "mpd_info_screen")]
@@ -57,7 +60,6 @@ struct Shared {
     can_get_album_art: bool,
     can_get_album_art_in_dir: bool,
     can_get_status: bool,
-    force_check: bool,
 }
 
 impl Shared {
@@ -79,7 +81,6 @@ impl Shared {
             can_get_album_art: true,
             can_get_album_art_in_dir: true,
             can_get_status: true,
-            force_check: true,
         }
     }
 }
@@ -281,6 +282,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut song_length_get_time: Instant = Instant::now() - Duration::from_secs(10);
     let mut current_binary_size: usize = 0;
     let mut poll_state = PollState::None;
+    let mut did_check_overtime = false;
+    let mut force_check = false;
     'main: loop {
         if !shared_data
             .lock()
@@ -312,7 +315,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 //    "art_data len is {} after fully reading",
                                 //    lock.art_data.len()
                                 //);
-                                // TODO Debug
+                                // DEBUG
                                 //let write_file_result = debug_write_albumart_to_file(&lock.art_data);
                             } else {
                                 lock.art_data.extend_from_slice(&read_vec[0..count]);
@@ -337,7 +340,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     ));
                                 }
                             } else {
-                                //println!("Got response: {}", line);
+                                //println!("Got response: {}", line); // DEBUG
                                 if line.starts_with("OK") {
                                     match poll_state {
                                         PollState::Password => authenticated = true,
@@ -394,6 +397,12 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         //println!("Got different song file, clearing art_data...");
                                         lock.current_song_title.clear();
                                         lock.current_song_artist.clear();
+                                        lock.current_song_length = 0.0;
+                                        lock.current_song_position = 0.0;
+                                        did_check_overtime = false;
+                                        force_check = false;
+                                        song_length_get_time =
+                                            Instant::now() - POLL_DURATION - Duration::from_secs(1);
                                     }
                                     lock.dirty = true;
                                     song_title_get_time = Instant::now();
@@ -450,6 +459,16 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
         if poll_state == PollState::None {
             let lock_result = shared_data.try_lock();
             if let Ok(mut lock) = lock_result {
+                // first check if overtime
+                if !did_check_overtime
+                    && lock.current_song_position + song_pos_get_time.elapsed().as_secs_f64() - 0.2
+                        > lock.current_song_length
+                {
+                    did_check_overtime = true;
+                    force_check = true;
+                    //println!("set \"force_check\""); // DEBUG
+                }
+
                 if !authenticated && !lock.password.is_empty() && lock.can_authenticate {
                     let p = lock.password.clone();
                     let write_result = lock.stream.write(format!("password {}\n", p).as_bytes());
@@ -458,13 +477,21 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
                     }
-                } else if (song_title_get_time.elapsed() > POLL_DURATION || lock.force_check) && lock.can_get_status {
+                } else if force_check {
                     let write_result = lock.stream.write(b"currentsong\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting currentsong info: {}", e);
                     } else {
                         poll_state = PollState::CurrentSong;
-                        lock.force_check = false;
+                        force_check = false;
+                        //println!("polling current song due to force_check"); // DEBUG
+                    }
+                } else if (song_title_get_time.elapsed() > POLL_DURATION) && lock.can_get_status {
+                    let write_result = lock.stream.write(b"currentsong\n");
+                    if let Err(e) = write_result {
+                        println!("Got error requesting currentsong info: {}", e);
+                    } else {
+                        poll_state = PollState::CurrentSong;
                     }
                 } else if (song_length_get_time.elapsed() > POLL_DURATION
                     || song_pos_get_time.elapsed() > POLL_DURATION)
@@ -507,7 +534,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                 println!("INFO: Temporarily failed to acquire lock for writing to tcp stream");
             }
         } else {
-            // TODO DEBUG
+            // DEBUG
             //println!("poll_state == {:?}, skipping write...", poll_state);
         }
 
@@ -519,8 +546,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
 fn get_info_from_shared(
     shared: Arc<Mutex<Shared>>,
     force_check: bool,
-    set_force_check: bool,
-) -> Result<InfoFromShared, String> {
+) -> Result<InfoFromShared, ()> {
     let mut filename: String = String::new();
     let mut title: String = String::new();
     let mut artist: String = String::new();
@@ -529,9 +555,6 @@ fn get_info_from_shared(
     let mut instant_rec: Instant = Instant::now();
     let mut error_text = String::new();
     if let Ok(mut lock) = shared.lock() {
-        if set_force_check {
-            lock.force_check = true;
-        }
         if lock.dirty || force_check {
             filename = lock.current_song_filename.clone();
             title = lock.current_song_title.clone();
@@ -551,7 +574,7 @@ fn get_info_from_shared(
             }
             lock.dirty = false;
         } else {
-            return Err(String::from("not dirty and force_check is off"));
+            return Err(());
         }
     }
 
@@ -694,6 +717,7 @@ async fn main() -> Result<(), String> {
     let mut artist_dim_opt: Option<TextDimensions> = None;
     let mut artist_font_size: u16 = ARTIST_INITIAL_FONT_SIZE;
     let mut temp_offset_y: f32;
+    let mut check_due_to_track_timer_count: u64 = 0;
 
     'macroquad_main: loop {
         let dt: f64 = get_frame_time() as f64;
@@ -714,9 +738,15 @@ async fn main() -> Result<(), String> {
 
         timer -= dt;
         track_timer -= dt;
-        if timer < 0.0 || track_timer < 0.0 {
+        if timer < 0.0
+            || (track_timer < 0.0 && check_due_to_track_timer_count < CHECK_TRACK_TIMER_MAX_COUNT)
+        {
+            if track_timer < 0.0 {
+                check_due_to_track_timer_count += 1;
+                //println!("check_due_to_track_timer_count incremented"); // DEBUG
+            }
             timer = CHECK_SHARED_WAIT_TIME;
-            let info_result = get_info_from_shared(shared_data.clone(), false, track_timer < 0.0);
+            let info_result = get_info_from_shared(shared_data.clone(), false);
             if let Ok(info) = info_result {
                 if info.filename != filename {
                     filename = info.filename;
@@ -727,6 +757,7 @@ async fn main() -> Result<(), String> {
                     artist.clear();
                     artist_dim_opt = None;
                     art_draw_params = None;
+                    check_due_to_track_timer_count = 0;
                 }
                 let duration_since = info.instant_rec.elapsed();
                 let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
@@ -854,7 +885,12 @@ async fn main() -> Result<(), String> {
 
             // Get title dimensions early so that artist size is at most title size
             if !title.is_empty() && !opt.disable_show_title && title_dim_opt.is_none() {
-                title_font_size = INITIAL_FONT_SIZE;
+                title_font_size = *filename_font_size
+                    .as_ref()
+                    .unwrap_or(&TITLE_INITIAL_FONT_SIZE);
+                if title_font_size < TITLE_INITIAL_MIN_FONT_SIZE {
+                    title_font_size = TITLE_INITIAL_MIN_FONT_SIZE;
+                }
                 loop {
                     title_dim_opt = Some(measure_text(&title, None, title_font_size, 1.0f32));
                     if title_dim_opt.as_ref().unwrap().width + TEXT_X_OFFSET > prev_width {
