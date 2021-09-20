@@ -22,7 +22,7 @@ const ARTIST_INITIAL_FONT_SIZE: u16 = 48;
 const TIMER_FONT_SIZE: u16 = 64;
 const SCREEN_DIFF_MARGIN: f32 = 1.0;
 const PROMPT_Y_OFFSET: f32 = 48.0;
-const CHECK_SHARED_WAIT_TIME: f64 = 2.0;
+const CHECK_SHARED_WAIT_TIME: f64 = 3.0;
 const CHECK_TRACK_TIMER_MAX_COUNT: u64 = 30;
 
 #[derive(StructOpt, Debug)]
@@ -283,7 +283,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     let mut current_binary_size: usize = 0;
     let mut poll_state = PollState::None;
     let mut did_check_overtime = false;
-    let mut force_check = false;
+    let mut force_get_currentsong = false;
+    let mut force_get_status = false;
     'main: loop {
         if !shared_data
             .lock()
@@ -400,9 +401,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         lock.current_song_length = 0.0;
                                         lock.current_song_position = 0.0;
                                         did_check_overtime = false;
-                                        force_check = false;
-                                        song_length_get_time =
-                                            Instant::now() - POLL_DURATION - Duration::from_secs(1);
+                                        force_get_status = true;
                                     }
                                     lock.dirty = true;
                                     song_title_get_time = Instant::now();
@@ -465,8 +464,8 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                         > lock.current_song_length
                 {
                     did_check_overtime = true;
-                    force_check = true;
-                    //println!("set \"force_check\""); // DEBUG
+                    force_get_currentsong = true;
+                    //println!("set \"force_get_currentsong\""); // DEBUG
                 }
 
                 if !authenticated && !lock.password.is_empty() && lock.can_authenticate {
@@ -477,16 +476,10 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
                     }
-                } else if force_check {
-                    let write_result = lock.stream.write(b"currentsong\n");
-                    if let Err(e) = write_result {
-                        println!("Got error requesting currentsong info: {}", e);
-                    } else {
-                        poll_state = PollState::CurrentSong;
-                        force_check = false;
-                        //println!("polling current song due to force_check"); // DEBUG
-                    }
-                } else if (song_title_get_time.elapsed() > POLL_DURATION) && lock.can_get_status {
+                } else if (song_title_get_time.elapsed() > POLL_DURATION || force_get_currentsong)
+                    && lock.can_get_status
+                {
+                    force_get_currentsong = false;
                     let write_result = lock.stream.write(b"currentsong\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting currentsong info: {}", e);
@@ -494,9 +487,11 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                         poll_state = PollState::CurrentSong;
                     }
                 } else if (song_length_get_time.elapsed() > POLL_DURATION
-                    || song_pos_get_time.elapsed() > POLL_DURATION)
+                    || song_pos_get_time.elapsed() > POLL_DURATION
+                    || force_get_status)
                     && lock.can_get_status
                 {
+                    force_get_status = false;
                     let write_result = lock.stream.write(b"status\n");
                     if let Err(e) = write_result {
                         println!("Got error requesting status: {}", e);
