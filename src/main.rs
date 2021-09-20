@@ -533,7 +533,9 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
             //println!("poll_state == {:?}, skipping write...", poll_state);
         }
 
-        thread::sleep(Duration::from_millis(50));
+        if poll_state != PollState::ReadPicture && poll_state != PollState::ReadPictureInDir {
+            thread::sleep(Duration::from_millis(50));
+        }
     }
     Ok(())
 }
