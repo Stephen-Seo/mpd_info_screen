@@ -5,7 +5,10 @@ use std::convert::TryInto;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
-use std::sync::{Arc, Mutex};
+use std::sync::{
+    atomic::{AtomicBool, Ordering},
+    Arc, Mutex,
+};
 use std::thread;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
@@ -55,7 +58,6 @@ struct Shared {
     thread_running: bool,
     stream: TcpStream,
     password: String,
-    dirty: bool,
     can_authenticate: bool,
     can_get_album_art: bool,
     can_get_album_art_in_dir: bool,
@@ -76,7 +78,6 @@ impl Shared {
             thread_running: true,
             stream,
             password: String::new(),
-            dirty: true,
             can_authenticate: true,
             can_get_album_art: true,
             can_get_album_art_in_dir: true,
@@ -271,7 +272,7 @@ fn read_line(
 //    Ok(())
 //}
 
-fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
+fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Result<(), String> {
     let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
     let mut init: bool = true;
     let mut saved: Vec<u8> = Vec::new();
@@ -311,7 +312,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                 count = read_vec.len();
                                 current_binary_size = 0;
                                 poll_state = PollState::None;
-                                lock.dirty = true;
+                                dirty_flag.store(true, Ordering::Relaxed);
                                 //println!(
                                 //    "art_data len is {} after fully reading",
                                 //    lock.art_data.len()
@@ -348,14 +349,14 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         PollState::ReadPicture => {
                                             if lock.art_data.is_empty() {
                                                 lock.can_get_album_art = false;
-                                                lock.dirty = true;
+                                                dirty_flag.store(true, Ordering::Relaxed);
                                                 println!("No embedded album art");
                                             }
                                         }
                                         PollState::ReadPictureInDir => {
                                             if lock.art_data.is_empty() {
                                                 lock.can_get_album_art_in_dir = false;
-                                                lock.dirty = true;
+                                                dirty_flag.store(true, Ordering::Relaxed);
                                                 println!("No album art in dir");
                                             }
                                         }
@@ -368,20 +369,20 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     match poll_state {
                                         PollState::Password => {
                                             lock.can_authenticate = false;
-                                            lock.dirty = true;
+                                            dirty_flag.store(true, Ordering::Relaxed);
                                         }
                                         PollState::CurrentSong | PollState::Status => {
                                             lock.can_get_status = false;
-                                            lock.dirty = true;
+                                            dirty_flag.store(true, Ordering::Relaxed);
                                         }
                                         PollState::ReadPicture => {
                                             lock.can_get_album_art = false;
-                                            lock.dirty = true;
+                                            dirty_flag.store(true, Ordering::Relaxed);
                                             println!("Failed to get readpicture");
                                         }
                                         PollState::ReadPictureInDir => {
                                             lock.can_get_album_art_in_dir = false;
-                                            lock.dirty = true;
+                                            dirty_flag.store(true, Ordering::Relaxed);
                                             println!("Failed to get albumart");
                                         }
                                         _ => (),
@@ -403,13 +404,13 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                         did_check_overtime = false;
                                         force_get_status = true;
                                     }
-                                    lock.dirty = true;
+                                    dirty_flag.store(true, Ordering::Relaxed);
                                     song_title_get_time = Instant::now();
                                 } else if line.starts_with("elapsed: ") {
                                     let parse_pos_result = f64::from_str(&line.split_off(9));
                                     if let Ok(value) = parse_pos_result {
                                         lock.current_song_position = value;
-                                        lock.dirty = true;
+                                        dirty_flag.store(true, Ordering::Relaxed);
                                         song_pos_get_time = Instant::now();
                                         lock.current_song_pos_rec = Instant::now();
                                     } else {
@@ -419,14 +420,14 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
                                     let parse_pos_result = f64::from_str(&line.split_off(10));
                                     if let Ok(value) = parse_pos_result {
                                         lock.current_song_length = value;
-                                        lock.dirty = true;
+                                        dirty_flag.store(true, Ordering::Relaxed);
                                         song_length_get_time = Instant::now();
                                     }
                                 } else if line.starts_with("size: ") {
                                     let parse_artsize_result = usize::from_str(&line.split_off(6));
                                     if let Ok(value) = parse_artsize_result {
                                         lock.art_data_size = value;
-                                        lock.dirty = true;
+                                        dirty_flag.store(true, Ordering::Relaxed);
                                     }
                                 } else if line.starts_with("binary: ") {
                                     let parse_artbinarysize_result =
@@ -540,10 +541,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>) -> Result<(), String> {
     Ok(())
 }
 
-fn get_info_from_shared(
-    shared: Arc<Mutex<Shared>>,
-    force_check: bool,
-) -> Result<InfoFromShared, ()> {
+fn get_info_from_shared(shared: Arc<Mutex<Shared>>) -> Result<InfoFromShared, ()> {
     let mut filename: String = String::new();
     let mut title: String = String::new();
     let mut artist: String = String::new();
@@ -551,27 +549,22 @@ fn get_info_from_shared(
     let mut pos: f64 = 0.0;
     let mut instant_rec: Instant = Instant::now();
     let mut error_text = String::new();
-    if let Ok(mut lock) = shared.lock() {
-        if lock.dirty || force_check {
-            filename = lock.current_song_filename.clone();
-            title = lock.current_song_title.clone();
-            artist = lock.current_song_artist.clone();
-            length = lock.current_song_length;
-            pos = lock.current_song_position;
-            instant_rec = lock.current_song_pos_rec;
-            //println!("Current song: {}", lock.current_song_filename);
-            //println!("Current song length: {}", lock.current_song_length);
-            //println!("Current song position: {}", lock.current_song_position);
-            if !lock.can_authenticate {
-                error_text = String::from("Failed to authenticate to mpd");
-            } else if !lock.can_get_status {
-                error_text = String::from("Failed to get status from mpd");
-            } else if !lock.can_get_album_art && !lock.can_get_album_art_in_dir {
-                error_text = String::from("Failed to get albumart from mpd");
-            }
-            lock.dirty = false;
-        } else {
-            return Err(());
+    if let Ok(lock) = shared.lock() {
+        filename = lock.current_song_filename.clone();
+        title = lock.current_song_title.clone();
+        artist = lock.current_song_artist.clone();
+        length = lock.current_song_length;
+        pos = lock.current_song_position;
+        instant_rec = lock.current_song_pos_rec;
+        //println!("Current song: {}", lock.current_song_filename);
+        //println!("Current song length: {}", lock.current_song_length);
+        //println!("Current song position: {}", lock.current_song_position);
+        if !lock.can_authenticate {
+            error_text = String::from("Failed to authenticate to mpd");
+        } else if !lock.can_get_status {
+            error_text = String::from("Failed to get status from mpd");
+        } else if !lock.can_get_album_art && !lock.can_get_album_art_in_dir {
+            error_text = String::from("Failed to get albumart from mpd");
         }
     }
 
@@ -689,10 +682,12 @@ async fn main() -> Result<(), String> {
             .expect("Should be able to get mutex lock")
             .password = p;
     }
+    let atomic_dirty_flag = Arc::new(AtomicBool::new(true));
     let thread_shared_data = shared_data.clone();
+    let thread_dirty_flag = atomic_dirty_flag.clone();
 
     let child = thread::spawn(move || {
-        info_loop(thread_shared_data).expect("Failure during info_loop");
+        info_loop(thread_shared_data, thread_dirty_flag).expect("Failure during info_loop");
     });
 
     let mut timer: f64 = 0.0;
@@ -743,32 +738,38 @@ async fn main() -> Result<(), String> {
                 //println!("check_due_to_track_timer_count incremented"); // DEBUG
             }
             timer = CHECK_SHARED_WAIT_TIME;
-            let info_result = get_info_from_shared(shared_data.clone(), false);
-            if let Ok(info) = info_result {
-                if info.filename != filename {
-                    filename = info.filename;
-                    art_texture = None;
-                    filename_font_size = None;
-                    title.clear();
-                    title_dim_opt = None;
-                    artist.clear();
-                    artist_dim_opt = None;
-                    art_draw_params = None;
-                    check_due_to_track_timer_count = 0;
+            let dirty_flag = atomic_dirty_flag.load(Ordering::Relaxed);
+            if dirty_flag || check_due_to_track_timer_count < CHECK_TRACK_TIMER_MAX_COUNT {
+                if dirty_flag {
+                    atomic_dirty_flag.store(false, Ordering::Relaxed);
                 }
-                let duration_since = info.instant_rec.elapsed();
-                let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
-                if (recorded_time - track_timer).abs() > TIME_MAX_DIFF {
-                    track_timer = info.length - info.pos - duration_since.as_secs_f64();
-                }
-                if !info.error_text.is_empty() {
-                    error_text = info.error_text;
-                }
-                if !info.title.is_empty() {
-                    title = info.title;
-                }
-                if !info.artist.is_empty() {
-                    artist = info.artist;
+                let info_result = get_info_from_shared(shared_data.clone());
+                if let Ok(info) = info_result {
+                    if info.filename != filename {
+                        filename = info.filename;
+                        art_texture = None;
+                        filename_font_size = None;
+                        title.clear();
+                        title_dim_opt = None;
+                        artist.clear();
+                        artist_dim_opt = None;
+                        art_draw_params = None;
+                        check_due_to_track_timer_count = 0;
+                    }
+                    let duration_since = info.instant_rec.elapsed();
+                    let recorded_time = info.length - info.pos - duration_since.as_secs_f64();
+                    if (recorded_time - track_timer).abs() > TIME_MAX_DIFF {
+                        track_timer = info.length - info.pos - duration_since.as_secs_f64();
+                    }
+                    if !info.error_text.is_empty() {
+                        error_text = info.error_text;
+                    }
+                    if !info.title.is_empty() {
+                        title = info.title;
+                    }
+                    if !info.artist.is_empty() {
+                        artist = info.artist;
+                    }
                 }
             }
 
