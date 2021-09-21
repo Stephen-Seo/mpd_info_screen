@@ -739,7 +739,10 @@ async fn main() -> Result<(), String> {
             }
             timer = CHECK_SHARED_WAIT_TIME;
             let dirty_flag = atomic_dirty_flag.load(Ordering::Relaxed);
-            if dirty_flag || check_due_to_track_timer_count < CHECK_TRACK_TIMER_MAX_COUNT {
+            if dirty_flag
+                || (track_timer < 0.0
+                    && check_due_to_track_timer_count < CHECK_TRACK_TIMER_MAX_COUNT)
+            {
                 if dirty_flag {
                     atomic_dirty_flag.store(false, Ordering::Relaxed);
                 }
