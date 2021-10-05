@@ -19,8 +19,8 @@ const TEXT_X_OFFSET: f32 = 16.0f32;
 const TEXT_Y_OFFSET: f32 = 16.0f32;
 const TIME_MAX_DIFF: f64 = 2.0f64;
 const INITIAL_FONT_SIZE: u16 = 96;
-const TITLE_INITIAL_FONT_SIZE: u16 = 64;
-const TITLE_INITIAL_MIN_FONT_SIZE: u16 = 40;
+const TITLE_INITIAL_FONT_SIZE: u16 = 196;
+const TITLE_INITIAL_MIN_FONT_SIZE: u16 = 44;
 const ARTIST_INITIAL_FONT_SIZE: u16 = 48;
 const TIMER_FONT_SIZE: u16 = 64;
 const SCREEN_DIFF_MARGIN: f32 = 1.0;
@@ -886,9 +886,12 @@ async fn main() -> Result<(), String> {
 
             // Get title dimensions early so that artist size is at most title size
             if !title.is_empty() && !opt.disable_show_title && title_dim_opt.is_none() {
-                title_font_size = *filename_font_size
-                    .as_ref()
-                    .unwrap_or(&TITLE_INITIAL_FONT_SIZE);
+                let mut length: u16 = title.chars().count().try_into().unwrap_or(u16::MAX);
+                length /= 8;
+                if length <= 2 {
+                    length = 3;
+                }
+                title_font_size = TITLE_INITIAL_FONT_SIZE / length as u16;
                 if title_font_size < TITLE_INITIAL_MIN_FONT_SIZE {
                     title_font_size = TITLE_INITIAL_MIN_FONT_SIZE;
                 }
