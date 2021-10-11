@@ -219,7 +219,7 @@ fn read_line(
     }
     buf_to_read.append(buf);
 
-    let mut prev_two: Vec<char> = Vec::with_capacity(3);
+    let mut prev_three: Vec<char> = Vec::with_capacity(4);
 
     let mut skip_count = 0;
     for idx in 0..count {
@@ -230,14 +230,15 @@ fn read_line(
         let next_char_result = check_next_chars(&buf_to_read, idx, saved);
         if let Ok((c, s)) = next_char_result {
             if !init {
-                prev_two.push(c);
-                if prev_two.len() > 2 {
-                    prev_two.remove(0);
+                prev_three.push(c);
+                if prev_three.len() > 3 {
+                    prev_three.remove(0);
                 }
-                if ['O', 'K'] == prev_two.as_slice() {
+                if ['O', 'K', '\n'] == prev_three.as_slice() && idx + 1 == count {
                     buf_to_read = buf_to_read.split_off(2);
                     result = String::from("OK");
                     buf.append(&mut buf_to_read);
+                    //println!("WARNING: OK was reached"); // DEBUG
                     return Ok(result);
                 }
             }
@@ -249,6 +250,7 @@ fn read_line(
             result.push(c);
             skip_count = s - 1;
         } else if let Err((msg, count)) = next_char_result {
+            //println!("ERROR: {}", msg); // DEBUG
             for i in 0..count {
                 saved.push(buf_to_read[idx + i as usize]);
             }
@@ -303,6 +305,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                 let read_result = lock.stream.read(&mut buf);
                 if let Ok(count) = read_result {
                     let mut read_vec: Vec<u8> = Vec::from(&buf[0..count]);
+                    //println!("{}", String::from_utf8(read_vec.clone()).unwrap_or("Unknown reply".into())); // DEBUG
                     loop {
                         let mut count = read_vec.len();
                         if current_binary_size > 0 {
@@ -329,6 +332,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                         }
                         let read_line_result = read_line(&mut read_vec, count, &mut saved, init);
                         if let Ok(mut line) = read_line_result {
+                            //println!("read_line_result line: \"{}\"", line); // DEBUG
                             line = saved_str + &line;
                             saved_str = String::new();
                             if init {
@@ -390,6 +394,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                                     }
                                     poll_state = PollState::None;
                                 } else if line.starts_with("file: ") {
+                                    //println!("Got \"file:\" : \"{}\"", line); // DEBUG
                                     let song_file = line.split_off(6);
                                     if song_file != lock.current_song_filename {
                                         lock.current_song_filename = song_file;
@@ -408,6 +413,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                                     dirty_flag.store(true, Ordering::Relaxed);
                                     song_title_get_time = Instant::now();
                                 } else if line.starts_with("elapsed: ") {
+                                    //println!("Got \"elapsed:\" : \"{}\"", line); // DEBUG
                                     let parse_pos_result = f64::from_str(&line.split_off(9));
                                     if let Ok(value) = parse_pos_result {
                                         lock.current_song_position = value;
@@ -418,6 +424,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                                         println!("Got error trying to get current_song_position");
                                     }
                                 } else if line.starts_with("duration: ") {
+                                    //println!("Got \"duration:\" : \"{}\"", line); // DEBUG
                                     let parse_pos_result = f64::from_str(&line.split_off(10));
                                     if let Ok(value) = parse_pos_result {
                                         lock.current_song_length = value;
@@ -425,20 +432,24 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                                         song_length_get_time = Instant::now();
                                     }
                                 } else if line.starts_with("size: ") {
+                                    //println!("Got \"size:\" : \"{}\"", line); // DEBUG
                                     let parse_artsize_result = usize::from_str(&line.split_off(6));
                                     if let Ok(value) = parse_artsize_result {
                                         lock.art_data_size = value;
                                         dirty_flag.store(true, Ordering::Relaxed);
                                     }
                                 } else if line.starts_with("binary: ") {
+                                    //println!("Got \"binary:\" : \"{}\"", line); // DEBUG
                                     let parse_artbinarysize_result =
                                         usize::from_str(&line.split_off(8));
                                     if let Ok(value) = parse_artbinarysize_result {
                                         current_binary_size = value;
                                     }
                                 } else if line.starts_with("Title: ") {
+                                    //println!("Got \"Title:\" : \"{}\"", line); // DEBUG
                                     lock.current_song_title = line.split_off(7);
                                 } else if line.starts_with("Artist: ") {
+                                    //println!("Got \"Artist:\" : \"{}\"", line); // DEBUG
                                     lock.current_song_artist = line.split_off(8);
                                 }
                             }
@@ -475,6 +486,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                     let write_result = lock.stream.write(format!("password {}\n", p).as_bytes());
                     if write_result.is_ok() {
                         poll_state = PollState::Password;
+                        //println!("password"); // DEBUG
                     } else if let Err(e) = write_result {
                         println!("Got error requesting authentication: {}", e);
                     }
@@ -487,6 +499,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                         println!("Got error requesting currentsong info: {}", e);
                     } else {
                         poll_state = PollState::CurrentSong;
+                        //println!("currentsong"); // DEBUG
                     }
                 } else if (song_length_get_time.elapsed() > POLL_DURATION
                     || song_pos_get_time.elapsed() > POLL_DURATION
@@ -499,6 +512,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                         println!("Got error requesting status: {}", e);
                     } else {
                         poll_state = PollState::Status;
+                        //println!("status"); // DEBUG
                     }
                 } else if (lock.art_data.is_empty() || lock.art_data.len() != lock.art_data_size)
                     && !lock.current_song_filename.is_empty()
@@ -513,7 +527,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                             println!("Got error requesting albumart: {}", e);
                         } else {
                             poll_state = PollState::ReadPicture;
-                            //println!("polling readpicture");
+                            //println!("readpicture"); // DEBUG
                         }
                     } else if lock.can_get_album_art_in_dir {
                         let write_result = lock.stream.write(
@@ -523,7 +537,7 @@ fn info_loop(shared_data: Arc<Mutex<Shared>>, dirty_flag: Arc<AtomicBool>) -> Re
                             println!("Got error requesting albumart in dir: {}", e);
                         } else {
                             poll_state = PollState::ReadPictureInDir;
-                            //println!("polling readpictureindir");
+                            //println!("albumart"); // DEBUG
                         }
                     }
                 }
