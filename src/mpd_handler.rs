@@ -424,20 +424,25 @@ impl MPDHandler {
                         PollState::Password => {
                             write_handle.can_authenticate = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                            write_handle.error_text = "Failed to authenticate to MPD".into();
                         }
                         PollState::CurrentSong | PollState::Status => {
                             write_handle.can_get_status = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                            write_handle.error_text = "Failed to get MPD status".into();
                         }
                         PollState::ReadPicture => {
                             write_handle.can_get_album_art = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
                             println!("Failed to get readpicture");
+                            // Not setting error_text here since
+                            // ReadPictureInDir is tried next
                         }
                         PollState::ReadPictureInDir => {
                             write_handle.can_get_album_art_in_dir = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
                             println!("Failed to get albumart");
+                            write_handle.error_text = "Failed to get album art from MPD".into();
                         }
                         _ => (),
                     }
@@ -456,6 +461,7 @@ impl MPDHandler {
                         write_handle.current_song_position = 0.0;
                         write_handle.did_check_overtime = false;
                         write_handle.force_get_status = true;
+                        write_handle.error_text.clear();
                     }
                     write_handle.dirty_flag.store(true, Ordering::Relaxed);
                     write_handle.song_title_get_time = Instant::now();
