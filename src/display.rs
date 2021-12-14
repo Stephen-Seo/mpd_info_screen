@@ -1,7 +1,7 @@
 use crate::mpd_handler::MPDHandler;
 use crate::Opt;
 use ggez::event::{self, EventHandler};
-use ggez::graphics::{self, Color, DrawParam, Drawable, Text, TextFragment};
+use ggez::graphics::{self, Color, DrawParam, Drawable, Rect, Text, TextFragment};
 use ggez::timer::{check_update_time, fps, yield_now};
 use ggez::Context;
 use ggez::GameError;
@@ -46,5 +46,18 @@ impl EventHandler for MPDDisplay {
         self.notice_text.draw(ctx, DrawParam::default());
 
         graphics::present(ctx)
+    }
+
+    fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) {
+        graphics::set_screen_coordinates(
+            ctx,
+            Rect {
+                x: 0.0,
+                y: 0.0,
+                w: width,
+                h: height,
+            },
+        )
+        .expect("Failed to handle resizing window");
     }
 }

@@ -1,7 +1,7 @@
 mod display;
 mod mpd_handler;
 
-use ggez::conf::WindowSetup;
+use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event;
 use ggez::ContextBuilder;
 use std::net::Ipv4Addr;
@@ -32,6 +32,10 @@ fn main() -> Result<(), String> {
     let (mut ctx, event_loop) = ContextBuilder::new("mpd_info_screen", "Stephen Seo")
         .window_setup(WindowSetup {
             title: "mpd info screen".into(),
+            ..Default::default()
+        })
+        .window_mode(WindowMode {
+            resizable: true,
             ..Default::default()
         })
         .build()
