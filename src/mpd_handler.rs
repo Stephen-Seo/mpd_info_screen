@@ -58,7 +58,7 @@ pub struct MPDHandler {
     song_length_get_time: Instant,
     self_thread: Option<Arc<Mutex<thread::JoinHandle<Result<(), String>>>>>,
     dirty_flag: Arc<AtomicBool>,
-    stop_flag: Arc<AtomicBool>,
+    pub stop_flag: Arc<AtomicBool>,
 }
 
 fn check_next_chars(
@@ -309,6 +309,14 @@ impl MPDHandler {
                 pos: read_lock.current_song_position,
                 error_text: read_lock.error_text.clone(),
             });
+        }
+
+        Err(())
+    }
+
+    pub fn is_dirty(h: Arc<RwLock<Self>>) -> Result<bool, ()> {
+        if let Ok(write_lock) = h.write() {
+            return Ok(write_lock.dirty_flag.swap(false, Ordering::Relaxed));
         }
 
         Err(())

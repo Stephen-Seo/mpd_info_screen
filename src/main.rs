@@ -2,9 +2,12 @@ mod display;
 mod mpd_handler;
 
 use ggez::conf::{WindowMode, WindowSetup};
-use ggez::event;
+use ggez::event::winit_event::KeyboardInput;
+use ggez::event::{self, ControlFlow, EventHandler};
 use ggez::ContextBuilder;
 use std::net::Ipv4Addr;
+use std::thread;
+use std::time::{Duration, Instant};
 use structopt::StructOpt;
 
 #[derive(StructOpt, Debug)]
@@ -41,7 +44,50 @@ fn main() -> Result<(), String> {
         .build()
         .expect("Failed to create ggez context");
 
-    let display = display::MPDDisplay::new(&mut ctx, opt);
+    let mut display = display::MPDDisplay::new(&mut ctx, opt);
 
-    event::run(ctx, event_loop, display);
+    event_loop.run(move |mut event, _window_target, control_flow| {
+        if !ctx.continuing {
+            *control_flow = ControlFlow::Exit;
+            return;
+        }
+
+        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(100));
+
+        let ctx = &mut ctx;
+
+        event::process_event(ctx, &mut event);
+        match event {
+            event::winit_event::Event::WindowEvent { event, .. } => match event {
+                event::winit_event::WindowEvent::CloseRequested => event::quit(ctx),
+                event::winit_event::WindowEvent::KeyboardInput {
+                    device_id: _,
+                    input:
+                        KeyboardInput {
+                            virtual_keycode: Some(keycode),
+                            ..
+                        },
+                    is_synthetic: _,
+                } => {
+                    if let event::KeyCode::Escape = keycode {
+                        *control_flow = ControlFlow::Exit;
+                    }
+                }
+                x => println!("Other window event fired: {:?}", x),
+            },
+            event::winit_event::Event::MainEventsCleared => {
+                ctx.timer_context.tick();
+
+                display.update(ctx).expect("Update failed");
+                display.draw(ctx).expect("Draw failed");
+
+                ctx.mouse_context.reset_delta();
+
+                // sleep to force 10-11 fps
+                thread::sleep(Duration::from_millis(90));
+                ggez::timer::yield_now();
+            }
+            x => println!("Device event fired: {:?}", x),
+        }
+    });
 }
