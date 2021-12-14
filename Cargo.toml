@@ -7,5 +7,5 @@ edition = "2018"
 
 [dependencies]
 structopt = "0.3"
-macroquad = "0.3"
 image = "0.23"
+ggez = "0.7"
