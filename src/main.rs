@@ -1,3 +1,4 @@
+mod debug_log;
 mod display;
 mod mpd_handler;
 
@@ -10,6 +11,8 @@ use std::net::Ipv4Addr;
 use std::thread;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
+
+use debug_log::log;
 
 #[derive(StructOpt, Debug)]
 #[structopt(name = "mpd_info_screen")]
@@ -87,7 +90,7 @@ fn main() -> Result<(), String> {
                     )
                     .expect("Failed to handle resizing window");
                 }
-                x => println!("Other window event fired: {:?}", x),
+                x => log(format!("Other window event fired: {:?}", x)),
             },
             event::winit_event::Event::MainEventsCleared => {
                 ctx.timer_context.tick();
@@ -101,7 +104,7 @@ fn main() -> Result<(), String> {
                 thread::sleep(Duration::from_millis(90));
                 ggez::timer::yield_now();
             }
-            x => println!("Device event fired: {:?}", x),
+            x => log(format!("Device event fired: {:?}", x)),
         }
     });
 }
