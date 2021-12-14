@@ -68,11 +68,12 @@ fn main() -> Result<(), String> {
                             ..
                         },
                     is_synthetic: _,
-                } => {
-                    if let event::KeyCode::Escape = keycode {
+                } => match keycode {
+                    event::KeyCode::Escape | event::KeyCode::Q => {
                         *control_flow = ControlFlow::Exit;
                     }
-                }
+                    _ => (),
+                },
                 x => println!("Other window event fired: {:?}", x),
             },
             event::winit_event::Event::MainEventsCleared => {

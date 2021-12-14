@@ -43,7 +43,7 @@ impl EventHandler for MPDDisplay {
     fn draw(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         graphics::clear(ctx, Color::BLACK);
 
-        self.notice_text.draw(ctx, DrawParam::default());
+        self.notice_text.draw(ctx, DrawParam::default())?;
 
         graphics::present(ctx)
     }

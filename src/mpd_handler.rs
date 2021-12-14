@@ -240,7 +240,7 @@ impl MPDHandler {
         )
         .map_err(|_| String::from("Failed to get TCP connection"))?;
 
-        let mut s = Arc::new(RwLock::new(Self {
+        let s = Arc::new(RwLock::new(Self {
             art_data: Vec::new(),
             art_data_size: 0,
             current_song_filename: String::new(),
@@ -271,12 +271,12 @@ impl MPDHandler {
             stop_flag: Arc::new(AtomicBool::new(false)),
         }));
 
-        let mut s_clone = s.clone();
-        let mut thread = Arc::new(Mutex::new(thread::spawn(|| Self::handler_loop(s_clone))));
+        let s_clone = s.clone();
+        let thread = Arc::new(Mutex::new(thread::spawn(|| Self::handler_loop(s_clone))));
 
         s.write()
-            .map_err(|_| String::from("Failed to start MPDHandler thread"))?
-            .self_thread = Some(thread.clone());
+            .map_err(|_| String::from("Failed to store thread handle in MPDHandler"))?
+            .self_thread = Some(thread);
 
         Ok(s)
     }
@@ -329,6 +329,13 @@ impl MPDHandler {
         'main: loop {
             if !Self::is_reading_picture(h.clone()) {
                 thread::sleep(SLEEP_DURATION);
+                if let Ok(write_handle) = h.write() {
+                    if write_handle.self_thread.is_none() {
+                        // main thread failed to store handle to this thread
+                        println!("MPDHandle thread stopping due to failed handle storage");
+                        break 'main;
+                    }
+                }
             }
 
             if let Err(err_string) =
@@ -609,10 +616,10 @@ impl MPDHandler {
 
     fn is_reading_picture(h: Arc<RwLock<MPDHandler>>) -> bool {
         if let Ok(read_handle) = h.read() {
-            return read_handle.poll_state == PollState::ReadPicture
-                || read_handle.poll_state == PollState::ReadPictureInDir;
+            read_handle.poll_state == PollState::ReadPicture
+                || read_handle.poll_state == PollState::ReadPictureInDir
         } else {
-            return false;
+            false
         }
     }
 }
