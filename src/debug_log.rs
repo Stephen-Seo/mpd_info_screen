@@ -13,5 +13,5 @@ pub fn log<T>(msg: T) -> ()
 where
     T: Display,
 {
-    // intentionally left blank, no logging in debug mode
+    // intentionally left blank, no logging in non-debug mode
 }
