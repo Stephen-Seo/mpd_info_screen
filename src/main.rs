@@ -4,6 +4,7 @@ mod mpd_handler;
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::winit_event::KeyboardInput;
 use ggez::event::{self, ControlFlow, EventHandler};
+use ggez::graphics::{self, Rect};
 use ggez::ContextBuilder;
 use std::net::Ipv4Addr;
 use std::thread;
@@ -74,6 +75,18 @@ fn main() -> Result<(), String> {
                     }
                     _ => (),
                 },
+                event::winit_event::WindowEvent::Resized(phys_size) => {
+                    graphics::set_screen_coordinates(
+                        ctx,
+                        Rect {
+                            x: 0.0,
+                            y: 0.0,
+                            w: phys_size.width as f32,
+                            h: phys_size.height as f32,
+                        },
+                    )
+                    .expect("Failed to handle resizing window");
+                }
                 x => println!("Other window event fired: {:?}", x),
             },
             event::winit_event::Event::MainEventsCleared => {

@@ -47,17 +47,4 @@ impl EventHandler for MPDDisplay {
 
         graphics::present(ctx)
     }
-
-    fn resize_event(&mut self, ctx: &mut Context, width: f32, height: f32) {
-        graphics::set_screen_coordinates(
-            ctx,
-            Rect {
-                x: 0.0,
-                y: 0.0,
-                w: width,
-                h: height,
-            },
-        )
-        .expect("Failed to handle resizing window");
-    }
 }
