@@ -211,11 +211,7 @@ impl EventHandler for MPDDisplay {
     }
 
     fn text_input_event(&mut self, _ctx: &mut Context, character: char) {
-        if !self.is_initialized
-            && self.opts.enable_prompt_password
-            && character.is_ascii()
-            && !character.is_ascii_control()
-        {
+        if !self.is_initialized && self.opts.enable_prompt_password && !character.is_control() {
             if self.opts.password.is_none() {
                 let s = String::from(character);
                 self.opts.password = Some(s);
