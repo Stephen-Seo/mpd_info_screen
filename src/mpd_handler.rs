@@ -452,6 +452,9 @@ impl MPDHandler {
                         write_handle.art_data.len(),
                         write_handle.art_data_size
                     ));
+                    if write_handle.art_data.len() == write_handle.art_data_size {
+                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                    }
                 } else {
                     write_handle.art_data.extend_from_slice(&buf_vec);
                     write_handle.current_binary_size -= buf_vec.len();
