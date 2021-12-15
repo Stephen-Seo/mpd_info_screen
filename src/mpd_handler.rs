@@ -505,6 +505,7 @@ impl MPDHandler {
                             write_handle.can_authenticate = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
                             write_handle.error_text = "Failed to authenticate to MPD".into();
+                            write_handle.stop_flag.store(true, Ordering::Relaxed);
                         }
                         PollState::CurrentSong | PollState::Status => {
                             write_handle.can_get_status = false;
