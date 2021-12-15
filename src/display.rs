@@ -2,7 +2,7 @@ use crate::mpd_handler::MPDHandler;
 use crate::Opt;
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{self, Color, DrawParam, Drawable, Rect, Text, TextFragment};
-use ggez::timer::{check_update_time, fps, yield_now};
+use ggez::timer::{check_update_time, fps};
 use ggez::Context;
 use ggez::GameError;
 use std::sync::{Arc, RwLock};
@@ -29,14 +29,8 @@ impl MPDDisplay {
 
 impl EventHandler for MPDDisplay {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
-        if !check_update_time(ctx, 10) {
-            yield_now();
-            return Ok(());
-        }
-
         self.notice_text = Text::new(TextFragment::new(format!("fps is {}", fps(ctx))));
 
-        yield_now();
         Ok(())
     }
 
