@@ -6,11 +6,8 @@ use ggez::graphics::{
     self, Color, DrawMode, DrawParam, Drawable, Font, Image, Mesh, MeshBuilder, PxScale, Rect,
     Text, TextFragment, Transform,
 };
-use ggez::timer;
-use ggez::Context;
-use ggez::GameError;
+use ggez::{timer, Context, GameError, GameResult};
 use image::io::Reader as ImageReader;
-use image::GenericImageView;
 use std::io::Cursor;
 use std::sync::atomic::AtomicBool;
 use std::sync::{atomic::Ordering, Arc, RwLock};
@@ -62,18 +59,15 @@ pub struct MPDDisplay {
     album_art_draw_transform: Option<Transform>,
     filename_text: Text,
     filename_transform: Transform,
-    filename_y: f32,
     artist_text: Text,
     artist_transform: Transform,
-    artist_y: f32,
     title_text: Text,
     title_transform: Transform,
-    title_y: f32,
     timer_text: Text,
     timer_transform: Transform,
-    timer_y: f32,
     timer: f64,
     length: f64,
+    text_bg_mesh: Option<Mesh>,
 }
 
 impl MPDDisplay {
@@ -92,18 +86,15 @@ impl MPDDisplay {
             album_art_draw_transform: None,
             filename_text: Text::new(""),
             filename_transform: Transform::default(),
-            filename_y: 1.0,
             artist_text: Text::new(""),
             artist_transform: Transform::default(),
-            artist_y: 1.0,
             title_text: Text::new(""),
             title_transform: Transform::default(),
-            title_y: 1.0,
             timer_text: Text::new("0"),
             timer_transform: Transform::default(),
-            timer_y: 1.0,
             timer: 0.0,
             length: 0.0,
+            text_bg_mesh: None,
         }
     }
 
@@ -183,10 +174,15 @@ impl MPDDisplay {
         Ok(())
     }
 
-    fn refresh_text_transforms(&mut self, ctx: &mut Context) {
+    fn refresh_text_transforms(&mut self, ctx: &mut Context) -> GameResult<()> {
         let screen_coords: Rect = graphics::screen_coordinates(ctx);
 
         let mut offset_y: f32 = screen_coords.h;
+
+        let mut filename_y: f32 = 0.0;
+        let mut artist_y: f32 = 0.0;
+        let mut title_y: f32 = 0.0;
+        let mut timer_y: f32 = 0.0;
 
         let set_transform = |text: &mut Text,
                              transform: &mut Transform,
@@ -255,7 +251,7 @@ impl MPDDisplay {
                 &mut self.filename_text,
                 &mut self.filename_transform,
                 &mut offset_y,
-                &mut self.filename_y,
+                &mut filename_y,
                 true,
                 false,
             );
@@ -268,7 +264,7 @@ impl MPDDisplay {
                 &mut self.artist_text,
                 &mut self.artist_transform,
                 &mut offset_y,
-                &mut self.artist_y,
+                &mut artist_y,
                 true,
                 true,
             );
@@ -281,7 +277,7 @@ impl MPDDisplay {
                 &mut self.title_text,
                 &mut self.title_transform,
                 &mut offset_y,
-                &mut self.title_y,
+                &mut title_y,
                 true,
                 false,
             );
@@ -293,10 +289,62 @@ impl MPDDisplay {
             &mut self.timer_text,
             &mut self.timer_transform,
             &mut offset_y,
-            &mut self.timer_y,
+            &mut timer_y,
             false,
             false,
         );
+
+        let filename_dimensions = self.filename_text.dimensions(ctx);
+        let artist_dimensions = self.artist_text.dimensions(ctx);
+        let title_dimensions = self.title_text.dimensions(ctx);
+        let timer_dimensions = self.timer_text.dimensions(ctx);
+
+        let mesh: Mesh = MeshBuilder::new()
+            .rectangle(
+                DrawMode::fill(),
+                Rect {
+                    x: TEXT_X_OFFSET,
+                    y: filename_y,
+                    w: filename_dimensions.w,
+                    h: filename_dimensions.h,
+                },
+                Color::from_rgba(0, 0, 0, 160),
+            )?
+            .rectangle(
+                DrawMode::fill(),
+                Rect {
+                    x: TEXT_X_OFFSET,
+                    y: artist_y,
+                    w: artist_dimensions.w,
+                    h: artist_dimensions.h,
+                },
+                Color::from_rgba(0, 0, 0, 160),
+            )?
+            .rectangle(
+                DrawMode::fill(),
+                Rect {
+                    x: TEXT_X_OFFSET,
+                    y: title_y,
+                    w: title_dimensions.w,
+                    h: title_dimensions.h,
+                },
+                Color::from_rgba(0, 0, 0, 160),
+            )?
+            .rectangle(
+                DrawMode::fill(),
+                Rect {
+                    x: TEXT_X_OFFSET,
+                    y: timer_y,
+                    w: timer_dimensions.w,
+                    h: timer_dimensions.h,
+                },
+                Color::from_rgba(0, 0, 0, 160),
+            )?
+            .build(ctx)?;
+
+        self.text_bg_mesh = Some(mesh);
+
+        Ok(())
     }
 }
 
@@ -353,6 +401,9 @@ impl EventHandler for MPDDisplay {
                             .store(true, Ordering::Relaxed);
                     }
                     if !shared.filename.is_empty() {
+                        if self.filename_text.contents() != shared.filename {
+                            self.album_art = None;
+                        }
                         self.filename_text = Text::new(shared.filename.clone());
                     } else {
                         self.dirty_flag
@@ -362,24 +413,26 @@ impl EventHandler for MPDDisplay {
                     }
                     self.timer = shared.pos;
                     self.length = shared.length;
-                    self.refresh_text_transforms(ctx);
+                    self.refresh_text_transforms(ctx)?;
                 } else {
                     log("Failed to acquire read lock for getting shared data");
                 }
-                let album_art_data_result =
-                    MPDHandler::get_art_data(self.mpd_handler.clone().unwrap());
-                if let Ok(art_data) = album_art_data_result {
-                    let result = self.get_image_from_data(ctx, art_data);
-                    if let Err(e) = result {
-                        log(e);
+                if self.album_art.is_none() {
+                    let album_art_data_result =
+                        MPDHandler::get_art_data(self.mpd_handler.clone().unwrap());
+                    if let Ok(art_data) = album_art_data_result {
+                        let result = self.get_image_from_data(ctx, art_data);
+                        if let Err(e) = result {
+                            log(e);
+                            self.album_art = None;
+                            self.album_art_draw_transform = None;
+                        } else {
+                            self.get_album_art_transform(ctx, false);
+                        }
+                    } else {
                         self.album_art = None;
                         self.album_art_draw_transform = None;
-                    } else {
-                        self.get_album_art_transform(ctx, false);
                     }
-                } else {
-                    self.album_art = None;
-                    self.album_art_draw_transform = None;
                 }
             }
         }
@@ -416,53 +469,9 @@ impl EventHandler for MPDDisplay {
         self.notice_text.draw(ctx, DrawParam::default())?;
 
         if self.is_valid && self.is_initialized {
-            let filename_dimensions = self.filename_text.dimensions(ctx);
-            let artist_dimensions = self.artist_text.dimensions(ctx);
-            let title_dimensions = self.title_text.dimensions(ctx);
-            let timer_dimensions = self.timer_text.dimensions(ctx);
-            let mesh: Mesh = MeshBuilder::new()
-                .rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x: TEXT_X_OFFSET,
-                        y: self.filename_y,
-                        w: filename_dimensions.w,
-                        h: filename_dimensions.h,
-                    },
-                    Color::from_rgba(0, 0, 0, 160),
-                )?
-                .rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x: TEXT_X_OFFSET,
-                        y: self.artist_y,
-                        w: artist_dimensions.w,
-                        h: artist_dimensions.h,
-                    },
-                    Color::from_rgba(0, 0, 0, 160),
-                )?
-                .rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x: TEXT_X_OFFSET,
-                        y: self.title_y,
-                        w: title_dimensions.w,
-                        h: title_dimensions.h,
-                    },
-                    Color::from_rgba(0, 0, 0, 160),
-                )?
-                .rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x: TEXT_X_OFFSET,
-                        y: self.timer_y,
-                        w: timer_dimensions.w,
-                        h: timer_dimensions.h,
-                    },
-                    Color::from_rgba(0, 0, 0, 160),
-                )?
-                .build(ctx)?;
-            mesh.draw(ctx, DrawParam::default())?;
+            if let Some(mesh) = &self.text_bg_mesh {
+                mesh.draw(ctx, DrawParam::default())?;
+            }
 
             self.filename_text.draw(
                 ctx,
@@ -540,6 +549,7 @@ impl EventHandler for MPDDisplay {
 
     fn resize_event(&mut self, ctx: &mut Context, _width: f32, _height: f32) {
         self.get_album_art_transform(ctx, false);
-        self.refresh_text_transforms(ctx);
+        self.refresh_text_transforms(ctx)
+            .expect("Failed to set text transforms");
     }
 }
