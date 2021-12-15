@@ -124,9 +124,37 @@ impl MPDDisplay {
         }
     }
 
-    fn get_album_art_transform(&mut self, ctx: &mut Context, fill: bool) -> () {
-        if fill {
-            unimplemented!("filled image not implemented");
+    fn get_album_art_transform(&mut self, ctx: &mut Context, fill_scaled: bool) -> () {
+        if fill_scaled {
+            if let Some(image) = &self.album_art {
+                let screen_coords: Rect = graphics::screen_coordinates(ctx);
+                let art_rect: Rect = image.dimensions();
+
+                // try to fit to width first
+                let mut x_scale = screen_coords.w / art_rect.w;
+                let mut y_scale = x_scale;
+                let mut new_width = art_rect.w * x_scale;
+                let mut new_height = art_rect.h * y_scale;
+                if new_height > screen_coords.h.abs() {
+                    // fit to height instead
+                    y_scale = screen_coords.h.abs() / art_rect.h;
+                    x_scale = y_scale;
+                    new_width = art_rect.w * x_scale;
+                    new_height = art_rect.h * y_scale;
+                }
+
+                let offset_x: f32 = (screen_coords.w.abs() - new_width) / 2.0f32;
+                let offset_y: f32 = (screen_coords.h.abs() - new_height) / 2.0f32;
+
+                self.album_art_draw_transform = Some(Transform::Values {
+                    dest: [offset_x, offset_y].into(),
+                    rotation: 0.0f32,
+                    scale: [x_scale, y_scale].into(),
+                    offset: [0.0f32, 0.0f32].into(),
+                });
+            } else {
+                self.album_art_draw_transform = None;
+            }
         } else {
             if let Some(image) = &self.album_art {
                 let screen_coords: Rect = graphics::screen_coordinates(ctx);
@@ -427,7 +455,7 @@ impl EventHandler for MPDDisplay {
                             self.album_art = None;
                             self.album_art_draw_transform = None;
                         } else {
-                            self.get_album_art_transform(ctx, false);
+                            self.get_album_art_transform(ctx, true);
                         }
                     } else {
                         self.album_art = None;
@@ -548,7 +576,7 @@ impl EventHandler for MPDDisplay {
     }
 
     fn resize_event(&mut self, ctx: &mut Context, _width: f32, _height: f32) {
-        self.get_album_art_transform(ctx, false);
+        self.get_album_art_transform(ctx, true);
         self.refresh_text_transforms(ctx)
             .expect("Failed to set text transforms");
     }
