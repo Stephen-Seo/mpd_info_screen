@@ -9,7 +9,7 @@ counter, and the filename currently being played
 
 # Usage
 
-    mpd_info_screen 0.1.0
+    mpd_info_screen 0.2.0
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
@@ -18,21 +18,19 @@ counter, and the filename currently being played
             --disable-show-artist      disable artist display
             --disable-show-filename    disable filename display
             --disable-show-title       disable title display
+            --no-scale-fill            don't scale-fill the album art to the window
             --pprompt                  input password via prompt
         -h, --help                     Prints help information
         -V, --version                  Prints version information
     
     OPTIONS:
-        -p <password>        
+        -p <password>
     
     ARGS:
-        <host>    
+        <host>
         <port>     [default: 6600]
 
-Note that Escape key and Q key pressed when the window is focused closes the
-program.
-
-Also, the "H" key hides the drawn text while it is pressed.
+Note that presing the Escape key when the window is focused closes the program.
 
 # Issues / TODO
 
