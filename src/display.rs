@@ -274,7 +274,7 @@ impl MPDDisplay {
             *offset_y -= height + TEXT_OFFSET_Y_SPACING;
         };
 
-        if !self.filename_text.contents().is_empty() {
+        if !self.filename_text.contents().is_empty() && !self.opts.disable_show_filename {
             set_transform(
                 &mut self.filename_text,
                 &mut self.filename_transform,
@@ -287,7 +287,7 @@ impl MPDDisplay {
             log("filename text is empty");
         }
 
-        if !self.artist_text.contents().is_empty() {
+        if !self.artist_text.contents().is_empty() && !self.opts.disable_show_artist {
             set_transform(
                 &mut self.artist_text,
                 &mut self.artist_transform,
@@ -300,7 +300,7 @@ impl MPDDisplay {
             log("artist text is empty");
         }
 
-        if !self.title_text.contents().is_empty() {
+        if !self.title_text.contents().is_empty() && !self.opts.disable_show_title {
             set_transform(
                 &mut self.title_text,
                 &mut self.title_transform,
@@ -327,8 +327,9 @@ impl MPDDisplay {
         let title_dimensions = self.title_text.dimensions(ctx);
         let timer_dimensions = self.timer_text.dimensions(ctx);
 
-        let mesh: Mesh = MeshBuilder::new()
-            .rectangle(
+        let mut mesh_builder: MeshBuilder = MeshBuilder::new();
+        if !self.opts.disable_show_filename {
+            mesh_builder.rectangle(
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
@@ -337,8 +338,10 @@ impl MPDDisplay {
                     h: filename_dimensions.h,
                 },
                 Color::from_rgba(0, 0, 0, 160),
-            )?
-            .rectangle(
+            )?;
+        }
+        if !self.opts.disable_show_artist {
+            mesh_builder.rectangle(
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
@@ -347,8 +350,10 @@ impl MPDDisplay {
                     h: artist_dimensions.h,
                 },
                 Color::from_rgba(0, 0, 0, 160),
-            )?
-            .rectangle(
+            )?;
+        }
+        if !self.opts.disable_show_title {
+            mesh_builder.rectangle(
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
@@ -357,7 +362,9 @@ impl MPDDisplay {
                     h: title_dimensions.h,
                 },
                 Color::from_rgba(0, 0, 0, 160),
-            )?
+            )?;
+        }
+        let mesh: Mesh = mesh_builder
             .rectangle(
                 DrawMode::fill(),
                 Rect {
@@ -504,29 +511,35 @@ impl EventHandler for MPDDisplay {
                 mesh.draw(ctx, DrawParam::default())?;
             }
 
-            self.filename_text.draw(
-                ctx,
-                DrawParam {
-                    trans: self.filename_transform,
-                    ..Default::default()
-                },
-            )?;
+            if !self.opts.disable_show_filename {
+                self.filename_text.draw(
+                    ctx,
+                    DrawParam {
+                        trans: self.filename_transform,
+                        ..Default::default()
+                    },
+                )?;
+            }
 
-            self.artist_text.draw(
-                ctx,
-                DrawParam {
-                    trans: self.artist_transform,
-                    ..Default::default()
-                },
-            )?;
+            if !self.opts.disable_show_artist {
+                self.artist_text.draw(
+                    ctx,
+                    DrawParam {
+                        trans: self.artist_transform,
+                        ..Default::default()
+                    },
+                )?;
+            }
 
-            self.title_text.draw(
-                ctx,
-                DrawParam {
-                    trans: self.title_transform,
-                    ..Default::default()
-                },
-            )?;
+            if !self.opts.disable_show_title {
+                self.title_text.draw(
+                    ctx,
+                    DrawParam {
+                        trans: self.title_transform,
+                        ..Default::default()
+                    },
+                )?;
+            }
 
             self.timer_text.draw(
                 ctx,
