@@ -88,11 +88,19 @@ impl EventHandler for MPDDisplay {
 
         if self.is_valid && self.is_initialized && self.poll_instant.elapsed() > POLL_TIME {
             self.poll_instant = Instant::now();
-            self.shared = MPDHandler::get_current_song_info(self.mpd_handler.clone().unwrap())
-                .map_or(None, |f| Some(f));
-            if let Some(shared) = &self.shared {
-                if self.notice_text.contents() != shared.error_text {
-                    self.notice_text = Text::new(TextFragment::new(shared.error_text.clone()));
+            if !self.dirty_flag.is_none()
+                && self
+                    .dirty_flag
+                    .as_ref()
+                    .unwrap()
+                    .swap(false, std::sync::atomic::Ordering::Relaxed)
+            {
+                self.shared = MPDHandler::get_current_song_info(self.mpd_handler.clone().unwrap())
+                    .map_or(None, |f| Some(f));
+                if let Some(shared) = &self.shared {
+                    if self.notice_text.contents() != shared.error_text {
+                        self.notice_text = Text::new(TextFragment::new(shared.error_text.clone()));
+                    }
                 }
             }
         }
