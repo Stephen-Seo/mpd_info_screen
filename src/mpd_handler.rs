@@ -217,29 +217,6 @@ fn read_line(
     Err((String::from("Newline not reached"), result))
 }
 
-fn seconds_to_time(seconds: f64) -> String {
-    let seconds_int: u64 = seconds.floor() as u64;
-    let minutes = seconds_int / 60;
-    let new_seconds: f64 = seconds - (minutes * 60) as f64;
-    let mut result: String;
-    if minutes > 0 {
-        result = minutes.to_string();
-        result.push(':');
-        if new_seconds < 10.0 {
-            result.push('0');
-        }
-    } else {
-        result = String::new();
-    }
-    result.push_str(&new_seconds.to_string());
-    let idx_result = result.find('.');
-    if let Some(idx) = idx_result {
-        result.truncate(idx + 2);
-    }
-
-    result
-}
-
 impl MPDHandler {
     pub fn new(host: Ipv4Addr, port: u16, password: String) -> Result<Arc<RwLock<Self>>, String> {
         let stream = TcpStream::connect_timeout(
