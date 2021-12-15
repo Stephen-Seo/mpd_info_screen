@@ -34,6 +34,7 @@ pub struct InfoFromShared {
 pub struct MPDHandler {
     art_data: Vec<u8>,
     art_data_size: usize,
+    art_data_type: String,
     current_song_filename: String,
     current_song_title: String,
     current_song_artist: String,
@@ -251,6 +252,7 @@ impl MPDHandler {
         let s = Arc::new(RwLock::new(Self {
             art_data: Vec::new(),
             art_data_size: 0,
+            art_data_type: String::new(),
             current_song_filename: String::new(),
             current_song_title: String::new(),
             current_song_artist: String::new(),
@@ -294,10 +296,10 @@ impl MPDHandler {
         Ok(s)
     }
 
-    pub fn get_art_data(h: Arc<RwLock<Self>>) -> Result<Vec<u8>, ()> {
+    pub fn get_art_data(h: Arc<RwLock<Self>>) -> Result<(Vec<u8>, String), ()> {
         if let Ok(read_lock) = h.try_read() {
             if read_lock.art_data.len() == read_lock.art_data_size {
-                return Ok(read_lock.art_data.clone());
+                return Ok((read_lock.art_data.clone(), read_lock.art_data_type.clone()));
             }
         }
 
@@ -439,14 +441,17 @@ impl MPDHandler {
 
         'handle_buf: loop {
             if write_handle.current_binary_size > 0 {
-                if write_handle.current_binary_size < buf_vec.len() {
+                if write_handle.current_binary_size <= buf_vec.len() {
                     let count = write_handle.current_binary_size;
                     write_handle.art_data.extend_from_slice(&buf_vec[0..count]);
                     buf_vec = buf_vec.split_off(count + 1);
                     write_handle.current_binary_size = 0;
                     write_handle.poll_state = PollState::None;
-                    write_handle.dirty_flag.store(true, Ordering::Relaxed);
-                    log("Got complete album art chunk");
+                    log(format!(
+                        "Album art recv progress: {}/{}",
+                        write_handle.art_data.len(),
+                        write_handle.art_data_size
+                    ));
                 } else {
                     write_handle.art_data.extend_from_slice(&buf_vec);
                     write_handle.current_binary_size -= buf_vec.len();
@@ -455,6 +460,9 @@ impl MPDHandler {
                         write_handle.art_data.len(),
                         write_handle.art_data_size
                     ));
+                    if write_handle.art_data.len() == write_handle.art_data_size {
+                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                    }
                     break 'handle_buf;
                 }
             }
@@ -583,6 +591,8 @@ impl MPDHandler {
                     write_handle.current_song_title = line.split_off(7);
                 } else if line.starts_with("Artist: ") {
                     write_handle.current_song_artist = line.split_off(8);
+                } else if line.starts_with("type: ") {
+                    write_handle.art_data_type = line.split_off(6);
                 } else {
                     log(format!("WARNING: Got unrecognized/ignored line: {}", line));
                 }

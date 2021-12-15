@@ -98,6 +98,7 @@ fn main() -> Result<(), String> {
                         },
                     )
                     .expect("Failed to handle resizing window");
+                    display.resize_event(ctx, phys_size.width as f32, phys_size.height as f32);
                 }
                 event::winit_event::WindowEvent::ReceivedCharacter(ch) => {
                     display.text_input_event(ctx, ch);
