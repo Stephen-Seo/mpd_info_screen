@@ -117,7 +117,11 @@ impl EventHandler for MPDDisplay {
     }
 
     fn text_input_event(&mut self, _ctx: &mut Context, character: char) {
-        if !self.is_initialized && self.opts.enable_prompt_password {
+        if !self.is_initialized
+            && self.opts.enable_prompt_password
+            && character.is_ascii()
+            && !character.is_ascii_control()
+        {
             if self.opts.password.is_none() {
                 let s = String::from(character);
                 self.opts.password = Some(s);
@@ -143,8 +147,13 @@ impl EventHandler for MPDDisplay {
                 if s.ends_with("*") {
                     self.notice_text = Text::new(TextFragment::new(s[0..(s.len() - 1)].to_owned()));
                 }
+
+                if let Some(input_p) = &mut self.opts.password {
+                    input_p.pop();
+                }
             } else if keycode == event::KeyCode::Return {
                 self.password_entered = true;
+                //log(format!("Entered \"{}\"", self.opts.password.as_ref().unwrap_or(&String::new())));
             }
         }
     }
