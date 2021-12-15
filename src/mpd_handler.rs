@@ -42,7 +42,6 @@ pub struct MPDHandler {
     current_song_position: f64,
     current_binary_size: usize,
     poll_state: PollState,
-    thread_running: bool,
     stream: TcpStream,
     password: String,
     error_text: String,
@@ -260,7 +259,6 @@ impl MPDHandler {
             current_song_position: 0.0,
             current_binary_size: 0,
             poll_state: PollState::None,
-            thread_running: true,
             stream,
             password,
             error_text: String::new(),
@@ -545,6 +543,7 @@ impl MPDHandler {
                         write_handle.current_song_filename = song_file;
                         write_handle.art_data.clear();
                         write_handle.art_data_size = 0;
+                        write_handle.art_data_type.clear();
                         write_handle.can_get_album_art = true;
                         write_handle.can_get_album_art_in_dir = true;
                         write_handle.current_song_title.clear();
