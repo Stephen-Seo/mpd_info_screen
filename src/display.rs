@@ -455,7 +455,10 @@ impl EventHandler for MPDDisplay {
                             self.album_art = None;
                             self.album_art_draw_transform = None;
                         } else {
-                            self.get_album_art_transform(ctx, true);
+                            self.get_album_art_transform(
+                                ctx,
+                                !self.opts.do_not_fill_scale_album_art,
+                            );
                         }
                     } else {
                         self.album_art = None;
@@ -576,7 +579,7 @@ impl EventHandler for MPDDisplay {
     }
 
     fn resize_event(&mut self, ctx: &mut Context, _width: f32, _height: f32) {
-        self.get_album_art_transform(ctx, true);
+        self.get_album_art_transform(ctx, !self.opts.do_not_fill_scale_album_art);
         self.refresh_text_transforms(ctx)
             .expect("Failed to set text transforms");
     }

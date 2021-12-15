@@ -30,6 +30,11 @@ pub struct Opt {
     disable_show_filename: bool,
     #[structopt(long = "pprompt", help = "input password via prompt")]
     enable_prompt_password: bool,
+    #[structopt(
+        long = "no-scale-fill",
+        help = "don't scale-fill the album art to the window"
+    )]
+    do_not_fill_scale_album_art: bool,
 }
 
 fn main() -> Result<(), String> {
