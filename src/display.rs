@@ -21,6 +21,7 @@ const TEXT_X_OFFSET: f32 = 0.3;
 const TEXT_OFFSET_Y_SPACING: f32 = 0.4;
 const TEXT_HEIGHT_SCALE: f32 = 0.1;
 const ARTIST_HEIGHT_SCALE: f32 = 0.08;
+const TIMER_HEIGHT_SCALE: f32 = 0.07;
 
 fn seconds_to_time(seconds: f64) -> String {
     let seconds_int: u64 = seconds.floor() as u64;
@@ -65,6 +66,8 @@ pub struct MPDDisplay {
     title_transform: Transform,
     timer_text: Text,
     timer_transform: Transform,
+    timer_x: f32,
+    timer_y: f32,
     timer: f64,
     length: f64,
     text_bg_mesh: Option<Mesh>,
@@ -93,6 +96,8 @@ impl MPDDisplay {
             title_transform: Transform::default(),
             timer_text: Text::new("0"),
             timer_transform: Transform::default(),
+            timer_x: INIT_FONT_SIZE_X,
+            timer_y: INIT_FONT_SIZE_Y,
             timer: 0.0,
             length: 0.0,
             text_bg_mesh: None,
@@ -209,6 +214,7 @@ impl MPDDisplay {
 
         let text_height_limit = TEXT_HEIGHT_SCALE * screen_coords.h.abs();
         let artist_height_limit = ARTIST_HEIGHT_SCALE * screen_coords.h.abs();
+        let timer_height = TIMER_HEIGHT_SCALE * screen_coords.h.abs();
 
         let mut offset_y: f32 = screen_coords.h;
 
@@ -222,7 +228,9 @@ impl MPDDisplay {
                              offset_y: &mut f32,
                              y: &mut f32,
                              is_string: bool,
-                             is_artist: bool| {
+                             is_artist: bool,
+                             timer_x: &mut f32,
+                             timer_y: &mut f32| {
             let mut current_x = INIT_FONT_SIZE_X;
             let mut current_y = INIT_FONT_SIZE_Y;
             let mut width: f32;
@@ -264,6 +272,19 @@ impl MPDDisplay {
                         break;
                     }
                 } else {
+                    let diff_scale_y = current_y / height * timer_height;
+                    let current_x = current_x * diff_scale_y / current_y;
+                    text.set_font(
+                        Font::default(),
+                        PxScale {
+                            x: current_x,
+                            y: diff_scale_y,
+                        },
+                    );
+                    *timer_x = current_x;
+                    *timer_y = diff_scale_y;
+                    // width = text.width(ctx); // not really used after this
+                    height = text.height(ctx);
                     break;
                 }
             }
@@ -287,6 +308,8 @@ impl MPDDisplay {
                 &mut filename_y,
                 true,
                 false,
+                &mut self.timer_x,
+                &mut self.timer_y,
             );
         } else {
             log("filename text is empty");
@@ -300,6 +323,8 @@ impl MPDDisplay {
                 &mut artist_y,
                 true,
                 true,
+                &mut self.timer_x,
+                &mut self.timer_y,
             );
         } else {
             log("artist text is empty");
@@ -313,6 +338,8 @@ impl MPDDisplay {
                 &mut title_y,
                 true,
                 false,
+                &mut self.timer_x,
+                &mut self.timer_y,
             );
         } else {
             log("title text is empty");
@@ -325,6 +352,8 @@ impl MPDDisplay {
             &mut timer_y,
             false,
             false,
+            &mut self.timer_x,
+            &mut self.timer_y,
         );
 
         let filename_dimensions = self.filename_text.dimensions(ctx);
@@ -487,8 +516,8 @@ impl EventHandler for MPDDisplay {
         self.timer_text.set_font(
             Font::default(),
             PxScale {
-                x: INIT_FONT_SIZE_X,
-                y: INIT_FONT_SIZE_Y,
+                x: self.timer_x,
+                y: self.timer_y,
             },
         );
 
