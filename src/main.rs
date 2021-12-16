@@ -3,7 +3,7 @@ mod display;
 mod mpd_handler;
 
 use ggez::conf::{WindowMode, WindowSetup};
-use ggez::event::winit_event::{KeyboardInput, ModifiersState};
+use ggez::event::winit_event::{ElementState, KeyboardInput, ModifiersState};
 use ggez::event::{self, ControlFlow, EventHandler};
 use ggez::graphics::{self, Rect};
 use ggez::{ContextBuilder, GameError};
@@ -79,6 +79,7 @@ fn main() -> Result<(), String> {
                     input:
                         KeyboardInput {
                             virtual_keycode: Some(keycode),
+                            state,
                             ..
                         },
                     is_synthetic: _,
@@ -90,7 +91,9 @@ fn main() -> Result<(), String> {
                         }
                         _ => (),
                     }
-                    display.key_down_event(ctx, keycode, modifiers_state.into(), false);
+                    if state == ElementState::Pressed {
+                        display.key_down_event(ctx, keycode, modifiers_state.into(), false);
+                    }
                 }
                 event::winit_event::WindowEvent::Resized(phys_size) => {
                     graphics::set_screen_coordinates(
