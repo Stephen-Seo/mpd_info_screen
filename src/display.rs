@@ -19,8 +19,8 @@ const INIT_FONT_SIZE_X: f32 = 24.0;
 const INIT_FONT_SIZE_Y: f32 = 34.0;
 const TEXT_X_OFFSET: f32 = 0.3;
 const TEXT_OFFSET_Y_SPACING: f32 = 0.4;
-const TEXT_HEIGHT_LIMIT: f32 = 55.0;
-const ARTIST_HEIGHT_LIMIT: f32 = 40.0;
+const TEXT_HEIGHT_SCALE: f32 = 0.1;
+const ARTIST_HEIGHT_SCALE: f32 = 0.08;
 
 fn seconds_to_time(seconds: f64) -> String {
     let seconds_int: u64 = seconds.floor() as u64;
@@ -207,6 +207,9 @@ impl MPDDisplay {
     fn refresh_text_transforms(&mut self, ctx: &mut Context) -> GameResult<()> {
         let screen_coords: Rect = graphics::screen_coordinates(ctx);
 
+        let text_height_limit = TEXT_HEIGHT_SCALE * screen_coords.h.abs();
+        let artist_height_limit = ARTIST_HEIGHT_SCALE * screen_coords.h.abs();
+
         let mut offset_y: f32 = screen_coords.h;
 
         let mut filename_y: f32 = 0.0;
@@ -245,9 +248,9 @@ impl MPDDisplay {
                     if screen_coords.w < width
                         || height
                             >= (if is_artist {
-                                ARTIST_HEIGHT_LIMIT
+                                artist_height_limit
                             } else {
-                                TEXT_HEIGHT_LIMIT
+                                text_height_limit
                             })
                     {
                         current_x = current_x * 4.0f32 / 5.0f32;
