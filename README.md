@@ -32,6 +32,8 @@ counter, and the filename currently being played
 
 Note that presing the Escape key when the window is focused closes the program.
 
+Also note that pressing the H key while displaying text will hide the text.
+
 # Issues / TODO
 
 - [ ] UTF-8 Non-ascii font support  

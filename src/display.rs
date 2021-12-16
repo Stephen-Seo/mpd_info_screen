@@ -68,6 +68,7 @@ pub struct MPDDisplay {
     timer: f64,
     length: f64,
     text_bg_mesh: Option<Mesh>,
+    hide_text: bool,
 }
 
 impl MPDDisplay {
@@ -95,6 +96,7 @@ impl MPDDisplay {
             timer: 0.0,
             length: 0.0,
             text_bg_mesh: None,
+            hide_text: false,
         }
     }
 
@@ -504,50 +506,52 @@ impl EventHandler for MPDDisplay {
             )?;
         }
 
-        self.notice_text.draw(ctx, DrawParam::default())?;
+        if !self.hide_text {
+            self.notice_text.draw(ctx, DrawParam::default())?;
 
-        if self.is_valid && self.is_initialized {
-            if let Some(mesh) = &self.text_bg_mesh {
-                mesh.draw(ctx, DrawParam::default())?;
-            }
+            if self.is_valid && self.is_initialized {
+                if let Some(mesh) = &self.text_bg_mesh {
+                    mesh.draw(ctx, DrawParam::default())?;
+                }
 
-            if !self.opts.disable_show_filename {
-                self.filename_text.draw(
+                if !self.opts.disable_show_filename {
+                    self.filename_text.draw(
+                        ctx,
+                        DrawParam {
+                            trans: self.filename_transform,
+                            ..Default::default()
+                        },
+                    )?;
+                }
+
+                if !self.opts.disable_show_artist {
+                    self.artist_text.draw(
+                        ctx,
+                        DrawParam {
+                            trans: self.artist_transform,
+                            ..Default::default()
+                        },
+                    )?;
+                }
+
+                if !self.opts.disable_show_title {
+                    self.title_text.draw(
+                        ctx,
+                        DrawParam {
+                            trans: self.title_transform,
+                            ..Default::default()
+                        },
+                    )?;
+                }
+
+                self.timer_text.draw(
                     ctx,
                     DrawParam {
-                        trans: self.filename_transform,
+                        trans: self.timer_transform,
                         ..Default::default()
                     },
                 )?;
             }
-
-            if !self.opts.disable_show_artist {
-                self.artist_text.draw(
-                    ctx,
-                    DrawParam {
-                        trans: self.artist_transform,
-                        ..Default::default()
-                    },
-                )?;
-            }
-
-            if !self.opts.disable_show_title {
-                self.title_text.draw(
-                    ctx,
-                    DrawParam {
-                        trans: self.title_transform,
-                        ..Default::default()
-                    },
-                )?;
-            }
-
-            self.timer_text.draw(
-                ctx,
-                DrawParam {
-                    trans: self.timer_transform,
-                    ..Default::default()
-                },
-            )?;
         }
 
         graphics::present(ctx)
@@ -588,6 +592,21 @@ impl EventHandler for MPDDisplay {
                 self.password_entered = true;
                 //log(format!("Entered \"{}\"", self.opts.password.as_ref().unwrap_or(&String::new())));
             }
+        } else {
+            if keycode == event::KeyCode::H {
+                self.hide_text = true;
+            }
+        }
+    }
+
+    fn key_up_event(
+        &mut self,
+        _ctx: &mut Context,
+        keycode: event::KeyCode,
+        _keymods: event::KeyMods,
+    ) {
+        if keycode == event::KeyCode::H {
+            self.hide_text = false;
         }
     }
 

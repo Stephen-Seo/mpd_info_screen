@@ -93,6 +93,8 @@ fn main() -> Result<(), String> {
                     }
                     if state == ElementState::Pressed {
                         display.key_down_event(ctx, keycode, modifiers_state.into(), false);
+                    } else {
+                        display.key_up_event(ctx, keycode, modifiers_state.into());
                     }
                 }
                 event::winit_event::WindowEvent::Resized(phys_size) => {
