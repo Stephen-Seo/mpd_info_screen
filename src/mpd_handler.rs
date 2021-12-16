@@ -296,7 +296,8 @@ impl MPDHandler {
                 title: read_lock.current_song_title.clone(),
                 artist: read_lock.current_song_artist.clone(),
                 length: read_lock.current_song_length,
-                pos: read_lock.current_song_position,
+                pos: read_lock.current_song_position
+                    + read_lock.song_pos_get_time.elapsed().as_secs_f64(),
                 error_text: read_lock.error_text.clone(),
             });
         }
