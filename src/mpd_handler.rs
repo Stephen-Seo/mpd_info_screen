@@ -319,7 +319,7 @@ impl MPDHandler {
     }
 
     pub fn is_art_data_ready(&self) -> bool {
-        self.art_data.len() == self.art_data_size
+        self.art_data_size != 0 && self.art_data.len() == self.art_data_size
     }
 
     pub fn get_art_data(&self) -> &[u8] {
