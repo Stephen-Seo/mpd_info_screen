@@ -271,24 +271,6 @@ impl MPDHandler {
         Ok(s)
     }
 
-    pub fn get_art_data(h: Arc<RwLock<Self>>) -> Result<(Vec<u8>, String), ()> {
-        if let Ok(read_lock) = h.try_read() {
-            if read_lock.art_data.len() == read_lock.art_data_size {
-                return Ok((read_lock.art_data.clone(), read_lock.art_data_type.clone()));
-            }
-        }
-
-        Err(())
-    }
-
-    pub fn can_get_art_data(h: Arc<RwLock<Self>>) -> bool {
-        if let Ok(read_lock) = h.try_read() {
-            return read_lock.can_get_album_art || read_lock.can_get_album_art_in_dir;
-        }
-
-        false
-    }
-
     pub fn get_current_song_info(h: Arc<RwLock<Self>>) -> Result<InfoFromShared, ()> {
         if let Ok(read_lock) = h.try_read() {
             return Ok(InfoFromShared {
@@ -330,6 +312,14 @@ impl MPDHandler {
                 thread::sleep(Duration::from_millis(10));
             }
         }
+    }
+
+    pub fn get_art_type(&self) -> String {
+        self.art_data_type.clone()
+    }
+
+    pub fn get_art_data(&self) -> &[u8] {
+        &self.art_data
     }
 
     fn handler_loop(h: Arc<RwLock<Self>>) -> Result<(), String> {

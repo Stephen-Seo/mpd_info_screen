@@ -180,19 +180,20 @@ impl MPDDisplay {
         }
     }
 
-    fn get_image_from_data(
-        &mut self,
-        ctx: &mut Context,
-        data: (Vec<u8>, String),
-    ) -> Result<(), String> {
+    fn get_image_from_data(&mut self, ctx: &mut Context) -> Result<(), String> {
+        let mpd_handle = self.mpd_handler.clone().unwrap();
+        let read_handle = mpd_handle
+            .try_read()
+            .map_err(|_| String::from("ERROR get_image_from_data: Failed to get read_handle"))?;
+
         let mut image_format: image::ImageFormat = image::ImageFormat::Png;
-        match data.1.as_str() {
+        match read_handle.get_art_type().as_str() {
             "image/png" => image_format = image::ImageFormat::Png,
             "image/jpg" | "image/jpeg" => image_format = image::ImageFormat::Jpeg,
             "image/gif" => image_format = image::ImageFormat::Gif,
             _ => (),
         }
-        let img = ImageReader::with_format(Cursor::new(data.0), image_format)
+        let img = ImageReader::with_format(Cursor::new(read_handle.get_art_data()), image_format)
             .decode()
             .map_err(|e| format!("ERROR: Failed to decode album art image: {}", e))?;
         let rgba8 = img.to_rgba8();
@@ -487,23 +488,13 @@ impl EventHandler for MPDDisplay {
                     log("Failed to acquire read lock for getting shared data");
                 }
                 if self.album_art.is_none() {
-                    let album_art_data_result =
-                        MPDHandler::get_art_data(self.mpd_handler.clone().unwrap());
-                    if let Ok(art_data) = album_art_data_result {
-                        let result = self.get_image_from_data(ctx, art_data);
-                        if let Err(e) = result {
-                            log(e);
-                            self.album_art = None;
-                            self.album_art_draw_transform = None;
-                        } else {
-                            self.get_album_art_transform(
-                                ctx,
-                                !self.opts.do_not_fill_scale_album_art,
-                            );
-                        }
-                    } else {
+                    let result = self.get_image_from_data(ctx);
+                    if let Err(e) = result {
+                        log(e);
                         self.album_art = None;
                         self.album_art_draw_transform = None;
+                    } else {
+                        self.get_album_art_transform(ctx, !self.opts.do_not_fill_scale_album_art);
                     }
                 }
             }
