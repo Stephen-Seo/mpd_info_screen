@@ -318,6 +318,10 @@ impl MPDHandler {
         self.art_data_type.clone()
     }
 
+    pub fn is_art_data_ready(&self) -> bool {
+        self.art_data.len() == self.art_data_size
+    }
+
     pub fn get_art_data(&self) -> &[u8] {
         &self.art_data
     }

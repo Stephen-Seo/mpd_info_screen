@@ -186,6 +186,12 @@ impl MPDDisplay {
             .try_read()
             .map_err(|_| String::from("ERROR get_image_from_data: Failed to get read_handle"))?;
 
+        if !read_handle.is_art_data_ready() {
+            return Err(String::from(
+                "ERROR get_image_from_data: art data not ready",
+            ));
+        }
+
         let mut image_format: image::ImageFormat = image::ImageFormat::Png;
         match read_handle.get_art_type().as_str() {
             "image/png" => image_format = image::ImageFormat::Png,
