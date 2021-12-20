@@ -14,7 +14,7 @@ use structopt::StructOpt;
 
 use debug_log::log;
 
-#[derive(StructOpt, Debug)]
+#[derive(StructOpt, Debug, Clone)]
 #[structopt(name = "mpd_info_screen")]
 pub struct Opt {
     host: Ipv4Addr,
@@ -35,6 +35,14 @@ pub struct Opt {
         help = "don't scale-fill the album art to the window"
     )]
     do_not_fill_scale_album_art: bool,
+    #[structopt(
+        short = "l",
+        long = "log-level",
+        possible_values = &debug_log::LogState::variants(),
+        default_value = "ERROR",
+        case_insensitive = true,
+    )]
+    log_level: debug_log::LogState,
 }
 
 fn main() -> Result<(), String> {
@@ -53,7 +61,7 @@ fn main() -> Result<(), String> {
         .build()
         .expect("Failed to create ggez context");
 
-    let mut display = display::MPDDisplay::new(&mut ctx, opt);
+    let mut display = display::MPDDisplay::new(&mut ctx, opt.clone());
 
     let mut modifiers_state: ModifiersState = ModifiersState::default();
 
@@ -113,7 +121,11 @@ fn main() -> Result<(), String> {
                 event::winit_event::WindowEvent::ReceivedCharacter(ch) => {
                     display.text_input_event(ctx, ch);
                 }
-                x => log(format!("Other window event fired: {:?}", x)),
+                x => log(
+                    format!("Other window event fired: {:?}", x),
+                    debug_log::LogState::VERBOSE,
+                    opt.log_level,
+                ),
             },
             event::winit_event::Event::MainEventsCleared => {
                 ctx.timer_context.tick();
@@ -137,7 +149,11 @@ fn main() -> Result<(), String> {
                 thread::sleep(Duration::from_millis(90));
                 ggez::timer::yield_now();
             }
-            x => log(format!("Device event fired: {:?}", x)),
+            x => log(
+                format!("Device event fired: {:?}", x),
+                debug_log::LogState::VERBOSE,
+                opt.log_level,
+            ),
         }
     });
 }

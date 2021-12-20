@@ -1,4 +1,4 @@
-use crate::debug_log::log;
+use crate::debug_log::{self, log};
 use crate::mpd_handler::{InfoFromShared, MPDHandler};
 use crate::Opt;
 use ggez::event::{self, EventHandler};
@@ -51,6 +51,7 @@ pub struct MPDDisplay {
     mpd_handler: Option<Arc<RwLock<MPDHandler>>>,
     is_valid: bool,
     is_initialized: bool,
+    is_authenticated: bool,
     notice_text: Text,
     poll_instant: Instant,
     shared: Option<InfoFromShared>,
@@ -81,6 +82,7 @@ impl MPDDisplay {
             mpd_handler: None,
             is_valid: true,
             is_initialized: false,
+            is_authenticated: false,
             notice_text: Text::new(""),
             poll_instant: Instant::now() - POLL_TIME,
             shared: None,
@@ -110,6 +112,7 @@ impl MPDDisplay {
             self.opts.host,
             self.opts.port,
             self.opts.password.clone().map_or(String::new(), |s| s),
+            self.opts.log_level,
         )
         .map_or_else(|_| None, |v| Some(v));
         if self.mpd_handler.is_some() {
@@ -124,10 +127,18 @@ impl MPDDisplay {
                     thread::sleep(POLL_TIME);
                 }
             }
-            log("Successfully initialized MPDHandler");
+            log(
+                "Successfully initialized MPDHandler",
+                debug_log::LogState::DEBUG,
+                self.opts.log_level,
+            );
         } else {
             self.is_valid = false;
-            log("Failed to initialize MPDHandler");
+            log(
+                "Failed to initialize MPDHandler",
+                debug_log::LogState::DEBUG,
+                self.opts.log_level,
+            );
         }
     }
 
@@ -319,7 +330,11 @@ impl MPDDisplay {
                 &mut self.timer_y,
             );
         } else {
-            log("filename text is empty");
+            log(
+                "filename text is empty",
+                debug_log::LogState::WARNING,
+                self.opts.log_level,
+            );
         }
 
         if !self.artist_text.contents().is_empty() && !self.opts.disable_show_artist {
@@ -334,7 +349,11 @@ impl MPDDisplay {
                 &mut self.timer_y,
             );
         } else {
-            log("artist text is empty");
+            log(
+                "artist text is empty",
+                debug_log::LogState::WARNING,
+                self.opts.log_level,
+            );
         }
 
         if !self.title_text.contents().is_empty() && !self.opts.disable_show_title {
@@ -349,7 +368,11 @@ impl MPDDisplay {
                 &mut self.timer_y,
             );
         } else {
-            log("title text is empty");
+            log(
+                "title text is empty",
+                debug_log::LogState::WARNING,
+                self.opts.log_level,
+            );
         }
 
         set_transform(
@@ -442,6 +465,42 @@ impl EventHandler for MPDDisplay {
             } else {
                 self.init_mpd_handler();
             }
+        } else if self.password_entered {
+            'check_state: loop {
+                let result = MPDHandler::is_authenticated(self.mpd_handler.clone().unwrap());
+                if let Ok(true) = result {
+                    self.is_authenticated = true;
+                    break;
+                } else if let Err(()) = result {
+                    continue;
+                } else {
+                    loop {
+                        let check_fail_result =
+                            MPDHandler::failed_to_authenticate(self.mpd_handler.clone().unwrap());
+                        if let Ok(true) = check_fail_result {
+                            {
+                                let mpd_handler = self.mpd_handler.clone().unwrap();
+                                loop {
+                                    let write_handle_result = mpd_handler.try_write();
+                                    if let Ok(write_handle) = write_handle_result {
+                                        write_handle.stop_flag.store(true, Ordering::Relaxed);
+                                        break;
+                                    }
+                                }
+                            }
+                            self.notice_text = Text::new(TextFragment::new("password: "));
+                            self.opts.password = Some(String::new());
+                            self.password_entered = false;
+                            self.is_initialized = false;
+                            break 'check_state;
+                        } else if let Err(()) = check_fail_result {
+                            continue;
+                        } else {
+                            break 'check_state;
+                        }
+                    }
+                }
+            }
         }
 
         if self.is_valid && self.is_initialized && self.poll_instant.elapsed() > POLL_TIME {
@@ -453,7 +512,11 @@ impl EventHandler for MPDDisplay {
                     .unwrap()
                     .swap(false, Ordering::Relaxed)
             {
-                log("dirty_flag cleared, acquiring shared data...");
+                log(
+                    "dirty_flag cleared, acquiring shared data...",
+                    debug_log::LogState::DEBUG,
+                    self.opts.log_level,
+                );
                 self.shared = MPDHandler::get_current_song_info(self.mpd_handler.clone().unwrap())
                     .map_or(None, |f| Some(f));
                 if let Some(shared) = &self.shared {
@@ -491,12 +554,16 @@ impl EventHandler for MPDDisplay {
                     self.length = shared.length;
                     self.refresh_text_transforms(ctx)?;
                 } else {
-                    log("Failed to acquire read lock for getting shared data");
+                    log(
+                        "Failed to acquire read lock for getting shared data",
+                        debug_log::LogState::DEBUG,
+                        self.opts.log_level,
+                    );
                 }
                 if self.album_art.is_none() {
                     let result = self.get_image_from_data(ctx);
                     if let Err(e) = result {
-                        log(e);
+                        log(e, debug_log::LogState::DEBUG, self.opts.log_level);
                         self.album_art = None;
                         self.album_art_draw_transform = None;
                     } else {
@@ -525,7 +592,6 @@ impl EventHandler for MPDDisplay {
         graphics::clear(ctx, Color::BLACK);
 
         if self.album_art.is_some() && self.album_art_draw_transform.is_some() {
-            log("Drawing album_art");
             self.album_art.as_ref().unwrap().draw(
                 ctx,
                 DrawParam {
@@ -619,7 +685,6 @@ impl EventHandler for MPDDisplay {
                 }
             } else if keycode == event::KeyCode::Return {
                 self.password_entered = true;
-                //log(format!("Entered \"{}\"", self.opts.password.as_ref().unwrap_or(&String::new())));
             }
         } else {
             if keycode == event::KeyCode::H {

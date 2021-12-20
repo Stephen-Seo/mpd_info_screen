@@ -1,4 +1,4 @@
-use crate::debug_log::log;
+use crate::debug_log::{log, LogState};
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
@@ -60,6 +60,7 @@ pub struct MPDHandler {
     self_thread: Option<Arc<Mutex<thread::JoinHandle<Result<(), String>>>>>,
     dirty_flag: Arc<AtomicBool>,
     pub stop_flag: Arc<AtomicBool>,
+    log_level: LogState,
 }
 
 fn check_next_chars(
@@ -218,7 +219,12 @@ fn read_line(
 }
 
 impl MPDHandler {
-    pub fn new(host: Ipv4Addr, port: u16, password: String) -> Result<Arc<RwLock<Self>>, String> {
+    pub fn new(
+        host: Ipv4Addr,
+        port: u16,
+        password: String,
+        log_level: LogState,
+    ) -> Result<Arc<RwLock<Self>>, String> {
         let stream = TcpStream::connect_timeout(
             &SocketAddr::new(IpAddr::V4(host), port),
             Duration::from_secs(5),
@@ -254,6 +260,7 @@ impl MPDHandler {
             self_thread: None,
             dirty_flag: Arc::new(AtomicBool::new(true)),
             stop_flag: Arc::new(AtomicBool::new(false)),
+            log_level,
         }));
 
         let s_clone = s.clone();
@@ -326,7 +333,18 @@ impl MPDHandler {
         &self.art_data
     }
 
+    pub fn is_authenticated(h: Arc<RwLock<Self>>) -> Result<bool, ()> {
+        let read_handle = h.try_read().map_err(|_| ())?;
+        Ok(read_handle.is_authenticated)
+    }
+
+    pub fn failed_to_authenticate(h: Arc<RwLock<Self>>) -> Result<bool, ()> {
+        let read_handle = h.try_read().map_err(|_| ())?;
+        Ok(!read_handle.can_authenticate)
+    }
+
     fn handler_loop(h: Arc<RwLock<Self>>) -> Result<(), String> {
+        let log_level = h.read().expect("Failed to get log_level").log_level;
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
         let mut saved: Vec<u8> = Vec::new();
         let mut saved_str: String = String::new();
@@ -349,7 +367,11 @@ impl MPDHandler {
                 if let Ok(write_handle) = h.try_write() {
                     if write_handle.self_thread.is_none() {
                         // main thread failed to store handle to this thread
-                        println!("MPDHandle thread stopping due to failed handle storage");
+                        log(
+                            "MPDHandle thread stopping due to failed handle storage",
+                            LogState::ERROR,
+                            write_handle.log_level,
+                        );
                         break 'main;
                     }
                 }
@@ -358,9 +380,17 @@ impl MPDHandler {
             if let Err(err_string) =
                 Self::handler_read_block(h.clone(), &mut buf, &mut saved, &mut saved_str)
             {
-                println!("WARNING: read_block error: {}", err_string);
+                log(
+                    format!("read_block error: {}", err_string),
+                    LogState::WARNING,
+                    log_level,
+                );
             } else if let Err(err_string) = Self::handler_write_block(h.clone()) {
-                println!("WARNING: write_block error: {}", err_string);
+                log(
+                    format!("write_block error: {}", err_string),
+                    LogState::WARNING,
+                    log_level,
+                );
             }
 
             if let Ok(read_handle) = h.try_read() {
@@ -372,7 +402,11 @@ impl MPDHandler {
             io::stdout().flush().unwrap();
         }
 
-        log("MPDHandler thread entering exit loop");
+        log(
+            "MPDHandler thread entering exit loop",
+            LogState::DEBUG,
+            log_level,
+        );
         'exit: loop {
             if let Ok(mut write_handle) = h.try_write() {
                 write_handle.self_thread = None;
@@ -417,22 +451,30 @@ impl MPDHandler {
                     buf_vec = buf_vec.split_off(count + 1);
                     write_handle.current_binary_size = 0;
                     write_handle.poll_state = PollState::None;
-                    log(format!(
-                        "Album art recv progress: {}/{}",
-                        write_handle.art_data.len(),
-                        write_handle.art_data_size
-                    ));
+                    log(
+                        format!(
+                            "Album art recv progress: {}/{}",
+                            write_handle.art_data.len(),
+                            write_handle.art_data_size
+                        ),
+                        LogState::DEBUG,
+                        write_handle.log_level,
+                    );
                     if write_handle.art_data.len() == write_handle.art_data_size {
                         write_handle.dirty_flag.store(true, Ordering::Relaxed);
                     }
                 } else {
                     write_handle.art_data.extend_from_slice(&buf_vec);
                     write_handle.current_binary_size -= buf_vec.len();
-                    log(format!(
-                        "Album art recv progress: {}/{}",
-                        write_handle.art_data.len(),
-                        write_handle.art_data_size
-                    ));
+                    log(
+                        format!(
+                            "Album art recv progress: {}/{}",
+                            write_handle.art_data.len(),
+                            write_handle.art_data_size
+                        ),
+                        LogState::DEBUG,
+                        write_handle.log_level,
+                    );
                     if write_handle.art_data.len() == write_handle.art_data_size {
                         write_handle.dirty_flag.store(true, Ordering::Relaxed);
                     }
@@ -446,7 +488,11 @@ impl MPDHandler {
                 if write_handle.is_init {
                     if line.starts_with("OK MPD ") {
                         write_handle.is_init = false;
-                        println!("Got initial \"OK\" from MPD");
+                        log(
+                            "Got initial \"OK\" from MPD",
+                            LogState::DEBUG,
+                            write_handle.log_level,
+                        );
                         write_handle.poll_state = PollState::None;
                         break 'handle_buf;
                     } else {
@@ -455,24 +501,33 @@ impl MPDHandler {
                 } // write_handle.is_init
 
                 if line.starts_with("OK") {
-                    log(format!(
-                        "Got OK when poll state is {:?}",
-                        write_handle.poll_state
-                    ));
+                    log(
+                        format!("Got OK when poll state is {:?}", write_handle.poll_state),
+                        LogState::DEBUG,
+                        write_handle.log_level,
+                    );
                     match write_handle.poll_state {
                         PollState::Password => write_handle.is_authenticated = true,
                         PollState::ReadPicture => {
                             if write_handle.art_data.is_empty() {
                                 write_handle.can_get_album_art = false;
                                 write_handle.dirty_flag.store(true, Ordering::Relaxed);
-                                println!("No embedded album art");
+                                log(
+                                    "No embedded album art",
+                                    LogState::WARNING,
+                                    write_handle.log_level,
+                                );
                             }
                         }
                         PollState::ReadPictureInDir => {
                             if write_handle.art_data.is_empty() {
                                 write_handle.can_get_album_art_in_dir = false;
                                 write_handle.dirty_flag.store(true, Ordering::Relaxed);
-                                println!("No album art in dir");
+                                log(
+                                    "No album art in dir",
+                                    LogState::WARNING,
+                                    write_handle.log_level,
+                                );
                             }
                         }
                         _ => (),
@@ -480,7 +535,7 @@ impl MPDHandler {
                     write_handle.poll_state = PollState::None;
                     break 'handle_buf;
                 } else if line.starts_with("ACK") {
-                    println!("ERROR: {}", line);
+                    log(line, LogState::WARNING, write_handle.log_level);
                     match write_handle.poll_state {
                         PollState::Password => {
                             write_handle.can_authenticate = false;
@@ -496,14 +551,22 @@ impl MPDHandler {
                         PollState::ReadPicture => {
                             write_handle.can_get_album_art = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
-                            println!("Failed to get readpicture");
+                            log(
+                                "Failed to get readpicture",
+                                LogState::WARNING,
+                                write_handle.log_level,
+                            );
                             // Not setting error_text here since
                             // ReadPictureInDir is tried next
                         }
                         PollState::ReadPictureInDir => {
                             write_handle.can_get_album_art_in_dir = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
-                            println!("Failed to get albumart");
+                            log(
+                                "Failed to get albumart",
+                                LogState::WARNING,
+                                write_handle.log_level,
+                            );
                             write_handle.error_text = "Failed to get album art from MPD".into();
                         }
                         _ => (),
@@ -535,7 +598,11 @@ impl MPDHandler {
                         write_handle.dirty_flag.store(true, Ordering::Relaxed);
                         write_handle.song_pos_get_time = Instant::now();
                     } else {
-                        println!("WARNING: Failed to parse current song position");
+                        log(
+                            "Failed to parse current song position",
+                            LogState::WARNING,
+                            write_handle.log_level,
+                        );
                     }
                 } else if line.starts_with("duration: ") {
                     let parse_pos_result = f64::from_str(&line.split_off(10));
@@ -544,7 +611,11 @@ impl MPDHandler {
                         write_handle.dirty_flag.store(true, Ordering::Relaxed);
                         write_handle.song_length_get_time = Instant::now();
                     } else {
-                        println!("WARNING: Failed to parse current song duration");
+                        log(
+                            "Failed to parse current song duration",
+                            LogState::WARNING,
+                            write_handle.log_level,
+                        );
                     }
                 } else if line.starts_with("size: ") {
                     let parse_artsize_result = usize::from_str(&line.split_off(6));
@@ -552,14 +623,22 @@ impl MPDHandler {
                         write_handle.art_data_size = value;
                         write_handle.dirty_flag.store(true, Ordering::Relaxed);
                     } else {
-                        println!("WARNING: Failed to parse album art byte size");
+                        log(
+                            "Failed to parse album art byte size",
+                            LogState::WARNING,
+                            write_handle.log_level,
+                        );
                     }
                 } else if line.starts_with("binary: ") {
                     let parse_artbinarysize_result = usize::from_str(&line.split_off(8));
                     if let Ok(value) = parse_artbinarysize_result {
                         write_handle.current_binary_size = value;
                     } else {
-                        println!("WARNING: Failed to parse album art chunk byte size");
+                        log(
+                            "Failed to parse album art chunk byte size",
+                            LogState::WARNING,
+                            write_handle.log_level,
+                        );
                     }
                 } else if line.starts_with("Title: ") {
                     write_handle.current_song_title = line.split_off(7);
@@ -568,15 +647,23 @@ impl MPDHandler {
                 } else if line.starts_with("type: ") {
                     write_handle.art_data_type = line.split_off(6);
                 } else {
-                    log(format!("WARNING: Got unrecognized/ignored line: {}", line));
+                    log(
+                        format!("Got unrecognized/ignored line: {}", line),
+                        LogState::WARNING,
+                        write_handle.log_level,
+                    );
                 }
             } else if let Err((msg, read_line_in_progress)) = read_line_result {
-                log(format!(
-                    "WARNING read_line: {}, saved size == {}, in_progress size == {}",
-                    msg,
-                    saved.len(),
-                    read_line_in_progress.len()
-                ));
+                log(
+                    format!(
+                        "read_line: {}, saved size == {}, in_progress size == {}",
+                        msg,
+                        saved.len(),
+                        read_line_in_progress.len()
+                    ),
+                    LogState::WARNING,
+                    write_handle.log_level,
+                );
                 *saved_str = read_line_in_progress;
                 break 'handle_buf;
             } else {
@@ -613,7 +700,11 @@ impl MPDHandler {
                 if write_result.is_ok() {
                     write_handle.poll_state = PollState::Password;
                 } else if let Err(e) = write_result {
-                    println!("ERROR: Failed to send password for authentication: {}", e);
+                    log(
+                        format!("Failed to send password for authentication: {}", e),
+                        LogState::ERROR,
+                        write_handle.log_level,
+                    );
                 }
             } else if write_handle.can_get_status
                 && (write_handle.song_title_get_time.elapsed() > POLL_DURATION
@@ -624,7 +715,11 @@ impl MPDHandler {
                 if write_result.is_ok() {
                     write_handle.poll_state = PollState::CurrentSong;
                 } else if let Err(e) = write_result {
-                    println!("ERROR: Failed to request song info over stream: {}", e);
+                    log(
+                        format!("Failed to request song info over stream: {}", e),
+                        LogState::ERROR,
+                        write_handle.log_level,
+                    );
                 }
             } else if write_handle.can_get_status
                 && (write_handle.song_length_get_time.elapsed() > POLL_DURATION
@@ -636,7 +731,11 @@ impl MPDHandler {
                 if write_result.is_ok() {
                     write_handle.poll_state = PollState::Status;
                 } else if let Err(e) = write_result {
-                    println!("ERROR: Failed to request status over stream: {}", e);
+                    log(
+                        format!("Failed to request status over stream: {}", e),
+                        LogState::ERROR,
+                        write_handle.log_level,
+                    );
                 }
             } else if (write_handle.art_data.is_empty()
                 || write_handle.art_data.len() != write_handle.art_data_size)
@@ -651,7 +750,11 @@ impl MPDHandler {
                     if write_result.is_ok() {
                         write_handle.poll_state = PollState::ReadPicture;
                     } else if let Err(e) = write_result {
-                        println!("ERROR: Failed to request album art: {}", e);
+                        log(
+                            format!("Failed to request album art: {}", e),
+                            LogState::ERROR,
+                            write_handle.log_level,
+                        );
                     }
                 } else if write_handle.can_get_album_art_in_dir {
                     let write_result = write_handle
@@ -660,7 +763,11 @@ impl MPDHandler {
                     if write_result.is_ok() {
                         write_handle.poll_state = PollState::ReadPictureInDir;
                     } else if let Err(e) = write_result {
-                        println!("ERROR: Failed to request album art in dir: {}", e);
+                        log(
+                            format!("Failed to request album art in dir: {}", e),
+                            LogState::ERROR,
+                            write_handle.log_level,
+                        );
                     }
                 }
             }
