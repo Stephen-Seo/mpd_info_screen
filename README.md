@@ -24,6 +24,7 @@ counter, and the filename currently being played
         -V, --version                  Prints version information
     
     OPTIONS:
+        -l, --log-level <log-level>     [default: ERROR]  [possible values: ERROR, WARNING, DEBUG, VERBOSE]
         -p <password>
     
     ARGS:
