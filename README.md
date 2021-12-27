@@ -40,6 +40,15 @@ Also note that pressing the H key while displaying text will hide the text.
 - [ ] UTF-8 Non-ascii font support  
 - [x] Support for album art not embedded but in the same directory
 
+## MPD Version
+
+To get album art from the image embedded with the audio file, the "readpicture"
+protocol command is queried from MPD, which was added in version 0.22 of MPD.
+It is uncertain when the "albumart" protocol command was added (this command
+fetches album art that resides in cover.jpg/cover.png in the same directory as
+the audio file). This means that older versions of MPD may not return album art
+to display.
+
 # Legal stuff
 
 Uses dependency [ggez](https://github.com/ggez/ggez) which is licensed under the
