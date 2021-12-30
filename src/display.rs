@@ -10,7 +10,7 @@ use ggez::{timer, Context, GameError, GameResult};
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use std::sync::atomic::AtomicBool;
-use std::sync::{atomic::Ordering, Arc, RwLock};
+use std::sync::{atomic::Ordering, Arc};
 use std::thread;
 use std::time::{Duration, Instant};
 
