@@ -118,9 +118,12 @@ impl MPDDisplay {
         if self.mpd_handler.is_some() {
             self.is_initialized = true;
             loop {
-                self.dirty_flag =
-                    MPDHandler::get_dirty_flag(&self.mpd_handler.as_ref().unwrap().clone())
-                        .map_or(None, |f| Some(f));
+                self.dirty_flag = self
+                    .mpd_handler
+                    .as_ref()
+                    .unwrap()
+                    .get_dirty_flag()
+                    .map_or(None, |f| Some(f));
                 if self.dirty_flag.is_some() {
                     break;
                 } else {
