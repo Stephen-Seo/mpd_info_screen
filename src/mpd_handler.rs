@@ -3,7 +3,7 @@ use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -31,7 +31,12 @@ pub struct InfoFromShared {
     pub error_text: String,
 }
 
+#[derive(Clone)]
 pub struct MPDHandler {
+    state: Arc<RwLock<MPDHandlerState>>,
+}
+
+pub struct MPDHandlerState {
     art_data: Vec<u8>,
     art_data_size: usize,
     art_data_type: String,
@@ -224,50 +229,52 @@ impl MPDHandler {
         port: u16,
         password: String,
         log_level: LogState,
-    ) -> Result<Arc<RwLock<Self>>, String> {
+    ) -> Result<Self, String> {
         let stream = TcpStream::connect_timeout(
             &SocketAddr::new(IpAddr::V4(host), port),
             Duration::from_secs(5),
         )
         .map_err(|_| String::from("Failed to get TCP connection"))?;
 
-        let s = Arc::new(RwLock::new(Self {
-            art_data: Vec::new(),
-            art_data_size: 0,
-            art_data_type: String::new(),
-            current_song_filename: String::new(),
-            current_song_title: String::new(),
-            current_song_artist: String::new(),
-            current_song_length: 0.0,
-            current_song_position: 0.0,
-            current_binary_size: 0,
-            poll_state: PollState::None,
-            stream,
-            password,
-            error_text: String::new(),
-            can_authenticate: true,
-            is_authenticated: false,
-            can_get_album_art: true,
-            can_get_album_art_in_dir: true,
-            can_get_status: true,
-            is_init: true,
-            did_check_overtime: false,
-            force_get_status: false,
-            force_get_current_song: false,
-            song_title_get_time: Instant::now() - Duration::from_secs(10),
-            song_pos_get_time: Instant::now() - Duration::from_secs(10),
-            song_length_get_time: Instant::now() - Duration::from_secs(10),
-            self_thread: None,
-            dirty_flag: Arc::new(AtomicBool::new(true)),
-            stop_flag: Arc::new(AtomicBool::new(false)),
-            log_level,
-        }));
+        let s = MPDHandler {
+            state: Arc::new(RwLock::new(MPDHandlerState {
+                art_data: Vec::new(),
+                art_data_size: 0,
+                art_data_type: String::new(),
+                current_song_filename: String::new(),
+                current_song_title: String::new(),
+                current_song_artist: String::new(),
+                current_song_length: 0.0,
+                current_song_position: 0.0,
+                current_binary_size: 0,
+                poll_state: PollState::None,
+                stream,
+                password,
+                error_text: String::new(),
+                can_authenticate: true,
+                is_authenticated: false,
+                can_get_album_art: true,
+                can_get_album_art_in_dir: true,
+                can_get_status: true,
+                is_init: true,
+                did_check_overtime: false,
+                force_get_status: false,
+                force_get_current_song: false,
+                song_title_get_time: Instant::now() - Duration::from_secs(10),
+                song_pos_get_time: Instant::now() - Duration::from_secs(10),
+                song_length_get_time: Instant::now() - Duration::from_secs(10),
+                self_thread: None,
+                dirty_flag: Arc::new(AtomicBool::new(true)),
+                stop_flag: Arc::new(AtomicBool::new(false)),
+                log_level,
+            })),
+        };
 
         let s_clone = s.clone();
-        let thread = Arc::new(Mutex::new(thread::spawn(|| Self::handler_loop(s_clone))));
+        let thread = Arc::new(Mutex::new(thread::spawn(|| s_clone.handler_loop())));
 
         loop {
-            if let Ok(mut write_handle) = s.try_write() {
+            if let Ok(mut write_handle) = s.state.try_write() {
                 write_handle.self_thread = Some(thread);
                 break;
             } else {
@@ -278,8 +285,8 @@ impl MPDHandler {
         Ok(s)
     }
 
-    pub fn get_current_song_info(h: Arc<RwLock<Self>>) -> Result<InfoFromShared, ()> {
-        if let Ok(read_lock) = h.try_read() {
+    pub fn get_current_song_info(&self) -> Result<InfoFromShared, ()> {
+        if let Ok(read_lock) = self.state.try_read() {
             return Ok(InfoFromShared {
                 filename: read_lock.current_song_filename.clone(),
                 title: read_lock.current_song_title.clone(),
@@ -294,25 +301,25 @@ impl MPDHandler {
         Err(())
     }
 
-    pub fn get_dirty_flag(h: Arc<RwLock<Self>>) -> Result<Arc<AtomicBool>, ()> {
-        if let Ok(read_lock) = h.try_read() {
+    pub fn get_dirty_flag(&self) -> Result<Arc<AtomicBool>, ()> {
+        if let Ok(read_lock) = self.state.try_read() {
             return Ok(read_lock.dirty_flag.clone());
         }
 
         Err(())
     }
 
-    pub fn is_dirty(h: Arc<RwLock<Self>>) -> Result<bool, ()> {
-        if let Ok(write_lock) = h.try_write() {
+    pub fn is_dirty(&self) -> Result<bool, ()> {
+        if let Ok(write_lock) = self.state.try_write() {
             return Ok(write_lock.dirty_flag.swap(false, Ordering::Relaxed));
         }
 
         Err(())
     }
 
-    pub fn force_get_current_song(h: Arc<RwLock<Self>>) -> () {
+    pub fn force_get_current_song(&self) -> () {
         loop {
-            if let Ok(mut write_lock) = h.try_write() {
+            if let Ok(mut write_lock) = self.state.try_write() {
                 write_lock.force_get_current_song = true;
                 break;
             } else {
@@ -321,36 +328,43 @@ impl MPDHandler {
         }
     }
 
-    pub fn get_art_type(&self) -> String {
-        self.art_data_type.clone()
-    }
-
-    pub fn is_art_data_ready(&self) -> bool {
-        self.art_data_size != 0 && self.art_data.len() == self.art_data_size
-    }
-
-    pub fn get_art_data(&self) -> &[u8] {
-        &self.art_data
-    }
-
-    pub fn is_authenticated(h: Arc<RwLock<Self>>) -> Result<bool, ()> {
-        let read_handle = h.try_read().map_err(|_| ())?;
+    pub fn is_authenticated(&self) -> Result<bool, ()> {
+        let read_handle = self.state.try_read().map_err(|_| ())?;
         Ok(read_handle.is_authenticated)
     }
 
-    pub fn failed_to_authenticate(h: Arc<RwLock<Self>>) -> Result<bool, ()> {
-        let read_handle = h.try_read().map_err(|_| ())?;
+    pub fn failed_to_authenticate(&self) -> Result<bool, ()> {
+        let read_handle = self.state.try_read().map_err(|_| ())?;
         Ok(!read_handle.can_authenticate)
     }
 
-    fn handler_loop(h: Arc<RwLock<Self>>) -> Result<(), String> {
-        let log_level = h.read().expect("Failed to get log_level").log_level;
+    pub fn has_image_data(&self) -> Result<bool, ()> {
+        let read_handle = self.state.try_read().map_err(|_| ())?;
+        Ok(read_handle.is_art_data_ready())
+    }
+
+    pub fn get_state_read_guard<'a>(&'a self) -> Result<RwLockReadGuard<'a, MPDHandlerState>, ()> {
+        Ok(self.state.try_read().map_err(|_| ())?)
+    }
+
+    pub fn stop_thread(&self) -> Result<(), ()> {
+        let read_handle = self.state.try_read().map_err(|_| ())?;
+        read_handle.stop_flag.store(true, Ordering::Relaxed);
+        Ok(())
+    }
+
+    fn handler_loop(self) -> Result<(), String> {
+        let log_level = self
+            .state
+            .read()
+            .expect("Failed to get log_level")
+            .log_level;
         let mut buf: [u8; BUF_SIZE] = [0; BUF_SIZE];
         let mut saved: Vec<u8> = Vec::new();
         let mut saved_str: String = String::new();
 
         loop {
-            if let Ok(write_handle) = h.try_write() {
+            if let Ok(write_handle) = self.state.try_write() {
                 write_handle
                     .stream
                     .set_nonblocking(true)
@@ -362,9 +376,9 @@ impl MPDHandler {
         }
 
         'main: loop {
-            if !Self::is_reading_picture(h.clone()) {
+            if !self.is_reading_picture() {
                 thread::sleep(SLEEP_DURATION);
-                if let Ok(write_handle) = h.try_write() {
+                if let Ok(write_handle) = self.state.try_write() {
                     if write_handle.self_thread.is_none() {
                         // main thread failed to store handle to this thread
                         log(
@@ -377,15 +391,13 @@ impl MPDHandler {
                 }
             }
 
-            if let Err(err_string) =
-                Self::handler_read_block(h.clone(), &mut buf, &mut saved, &mut saved_str)
-            {
+            if let Err(err_string) = self.handler_read_block(&mut buf, &mut saved, &mut saved_str) {
                 log(
                     format!("read_block error: {}", err_string),
                     LogState::WARNING,
                     log_level,
                 );
-            } else if let Err(err_string) = Self::handler_write_block(h.clone()) {
+            } else if let Err(err_string) = self.handler_write_block() {
                 log(
                     format!("write_block error: {}", err_string),
                     LogState::WARNING,
@@ -393,7 +405,7 @@ impl MPDHandler {
                 );
             }
 
-            if let Ok(read_handle) = h.try_read() {
+            if let Ok(read_handle) = self.state.try_read() {
                 if read_handle.stop_flag.load(Ordering::Relaxed) {
                     break 'main;
                 }
@@ -408,7 +420,7 @@ impl MPDHandler {
             log_level,
         );
         'exit: loop {
-            if let Ok(mut write_handle) = h.try_write() {
+            if let Ok(mut write_handle) = self.state.try_write() {
                 write_handle.self_thread = None;
                 break 'exit;
             }
@@ -419,12 +431,13 @@ impl MPDHandler {
     }
 
     fn handler_read_block(
-        h: Arc<RwLock<Self>>,
+        &self,
         buf: &mut [u8; BUF_SIZE],
         saved: &mut Vec<u8>,
         saved_str: &mut String,
     ) -> Result<(), String> {
-        let mut write_handle = h
+        let mut write_handle = self
+            .state
             .try_write()
             .map_err(|_| String::from("Failed to get MPDHandler write lock (read_block)"))?;
         let mut read_amount: usize = 0;
@@ -674,8 +687,9 @@ impl MPDHandler {
         Ok(())
     }
 
-    fn handler_write_block(h: Arc<RwLock<MPDHandler>>) -> Result<(), String> {
-        let mut write_handle = h
+    fn handler_write_block(&self) -> Result<(), String> {
+        let mut write_handle = self
+            .state
             .try_write()
             .map_err(|_| String::from("Failed to get MPDHandler write lock (write_block)"))?;
         if write_handle.poll_state == PollState::None {
@@ -776,14 +790,28 @@ impl MPDHandler {
         Ok(())
     }
 
-    fn is_reading_picture(h: Arc<RwLock<MPDHandler>>) -> bool {
+    fn is_reading_picture(&self) -> bool {
         loop {
-            if let Ok(read_handle) = h.try_read() {
+            if let Ok(read_handle) = self.state.try_read() {
                 return read_handle.poll_state == PollState::ReadPicture
                     || read_handle.poll_state == PollState::ReadPictureInDir;
             } else {
                 thread::sleep(Duration::from_millis(5));
             }
         }
+    }
+}
+
+impl MPDHandlerState {
+    pub fn get_art_type(&self) -> String {
+        self.art_data_type.clone()
+    }
+
+    pub fn is_art_data_ready(&self) -> bool {
+        self.art_data_size != 0 && self.art_data.len() == self.art_data_size
+    }
+
+    pub fn get_art_data(&self) -> &[u8] {
+        &self.art_data
     }
 }

@@ -48,7 +48,7 @@ fn seconds_to_time(seconds: f64) -> String {
 
 pub struct MPDDisplay {
     opts: Opt,
-    mpd_handler: Option<Arc<RwLock<MPDHandler>>>,
+    mpd_handler: Option<MPDHandler>,
     is_valid: bool,
     is_initialized: bool,
     is_authenticated: bool,
@@ -119,7 +119,7 @@ impl MPDDisplay {
             self.is_initialized = true;
             loop {
                 self.dirty_flag =
-                    MPDHandler::get_dirty_flag(self.mpd_handler.as_ref().unwrap().clone())
+                    MPDHandler::get_dirty_flag(&self.mpd_handler.as_ref().unwrap().clone())
                         .map_or(None, |f| Some(f));
                 if self.dirty_flag.is_some() {
                     break;
@@ -192,25 +192,25 @@ impl MPDDisplay {
     }
 
     fn get_image_from_data(&mut self, ctx: &mut Context) -> Result<(), String> {
-        let mpd_handle = self.mpd_handler.clone().unwrap();
-        let read_handle = mpd_handle
-            .try_read()
-            .map_err(|_| String::from("ERROR get_image_from_data: Failed to get read_handle"))?;
-
-        if !read_handle.is_art_data_ready() {
-            return Err(String::from(
-                "ERROR get_image_from_data: art data not ready",
-            ));
+        let read_guard = self
+            .mpd_handler
+            .as_ref()
+            .unwrap()
+            .get_state_read_guard()
+            .map_err(|_| String::from("Failed to get read_guard of MPDHandlerState"))?;
+        if !read_guard.is_art_data_ready() {
+            return Err(String::from("MPDHandlerState does not have album art data"));
         }
+        let image_ref = read_guard.get_art_data();
 
         let mut image_format: image::ImageFormat = image::ImageFormat::Png;
-        match read_handle.get_art_type().as_str() {
+        match read_guard.get_art_type().as_str() {
             "image/png" => image_format = image::ImageFormat::Png,
             "image/jpg" | "image/jpeg" => image_format = image::ImageFormat::Jpeg,
             "image/gif" => image_format = image::ImageFormat::Gif,
             _ => (),
         }
-        let img = ImageReader::with_format(Cursor::new(read_handle.get_art_data()), image_format)
+        let img = ImageReader::with_format(Cursor::new(&image_ref), image_format)
             .decode()
             .map_err(|e| format!("ERROR: Failed to decode album art image: {}", e))?;
         let rgba8 = img.to_rgba8();
@@ -467,7 +467,7 @@ impl EventHandler for MPDDisplay {
             }
         } else if self.password_entered {
             'check_state: loop {
-                let result = MPDHandler::is_authenticated(self.mpd_handler.clone().unwrap());
+                let result = self.mpd_handler.as_ref().unwrap().is_authenticated();
                 if let Ok(true) = result {
                     self.is_authenticated = true;
                     break;
@@ -476,14 +476,13 @@ impl EventHandler for MPDDisplay {
                 } else {
                     loop {
                         let check_fail_result =
-                            MPDHandler::failed_to_authenticate(self.mpd_handler.clone().unwrap());
+                            self.mpd_handler.as_ref().unwrap().failed_to_authenticate();
                         if let Ok(true) = check_fail_result {
                             {
                                 let mpd_handler = self.mpd_handler.clone().unwrap();
                                 loop {
-                                    let write_handle_result = mpd_handler.try_write();
-                                    if let Ok(write_handle) = write_handle_result {
-                                        write_handle.stop_flag.store(true, Ordering::Relaxed);
+                                    let stop_thread_result = mpd_handler.stop_thread();
+                                    if stop_thread_result.is_ok() {
                                         break;
                                     }
                                 }
@@ -517,7 +516,11 @@ impl EventHandler for MPDDisplay {
                     debug_log::LogState::DEBUG,
                     self.opts.log_level,
                 );
-                self.shared = MPDHandler::get_current_song_info(self.mpd_handler.clone().unwrap())
+                self.shared = self
+                    .mpd_handler
+                    .as_ref()
+                    .unwrap()
+                    .get_current_song_info()
                     .map_or(None, |f| Some(f));
                 if let Some(shared) = &self.shared {
                     if self.notice_text.contents() != shared.error_text {
