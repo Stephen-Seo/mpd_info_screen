@@ -317,7 +317,7 @@ impl MPDHandler {
         Err(())
     }
 
-    pub fn force_get_current_song(&self) -> () {
+    pub fn force_get_current_song(&self) {
         loop {
             if let Ok(mut write_lock) = self.state.try_write() {
                 write_lock.force_get_current_song = true;
@@ -343,8 +343,8 @@ impl MPDHandler {
         Ok(read_handle.is_art_data_ready())
     }
 
-    pub fn get_state_read_guard<'a>(&'a self) -> Result<RwLockReadGuard<'a, MPDHandlerState>, ()> {
-        Ok(self.state.try_read().map_err(|_| ())?)
+    pub fn get_state_read_guard(&self) -> Result<RwLockReadGuard<'_, MPDHandlerState>, ()> {
+        self.state.try_read().map_err(|_| ())
     }
 
     pub fn stop_thread(&self) -> Result<(), ()> {

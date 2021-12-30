@@ -92,12 +92,9 @@ fn main() -> Result<(), String> {
                         },
                     is_synthetic: _,
                 } => {
-                    match keycode {
-                        event::KeyCode::Escape => {
-                            *control_flow = ControlFlow::Exit;
-                            return;
-                        }
-                        _ => (),
+                    if keycode == event::KeyCode::Escape {
+                        *control_flow = ControlFlow::Exit;
+                        return;
                     }
                     if state == ElementState::Pressed {
                         display.key_down_event(ctx, keycode, modifiers_state.into(), false);

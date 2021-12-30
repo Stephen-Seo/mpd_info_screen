@@ -107,23 +107,18 @@ impl MPDDisplay {
         }
     }
 
-    fn init_mpd_handler(&mut self) -> () {
+    fn init_mpd_handler(&mut self) {
         self.mpd_handler = MPDHandler::new(
             self.opts.host,
             self.opts.port,
             self.opts.password.clone().map_or(String::new(), |s| s),
             self.opts.log_level,
         )
-        .map_or_else(|_| None, |v| Some(v));
+        .map_or_else(|_| None, Some);
         if self.mpd_handler.is_some() {
             self.is_initialized = true;
             loop {
-                self.dirty_flag = self
-                    .mpd_handler
-                    .as_ref()
-                    .unwrap()
-                    .get_dirty_flag()
-                    .map_or(None, |f| Some(f));
+                self.dirty_flag = self.mpd_handler.as_ref().unwrap().get_dirty_flag().ok();
                 if self.dirty_flag.is_some() {
                     break;
                 } else {
@@ -145,7 +140,7 @@ impl MPDDisplay {
         }
     }
 
-    fn get_album_art_transform(&mut self, ctx: &mut Context, fill_scaled: bool) -> () {
+    fn get_album_art_transform(&mut self, ctx: &mut Context, fill_scaled: bool) {
         if fill_scaled {
             if let Some(image) = &self.album_art {
                 let screen_coords: Rect = graphics::screen_coordinates(ctx);
@@ -176,21 +171,19 @@ impl MPDDisplay {
             } else {
                 self.album_art_draw_transform = None;
             }
+        } else if let Some(image) = &self.album_art {
+            let screen_coords: Rect = graphics::screen_coordinates(ctx);
+            let art_rect: Rect = image.dimensions();
+            let offset_x: f32 = (screen_coords.w.abs() - art_rect.w.abs()) / 2.0f32;
+            let offset_y: f32 = (screen_coords.h.abs() - art_rect.h.abs()) / 2.0f32;
+            self.album_art_draw_transform = Some(Transform::Values {
+                dest: [offset_x, offset_y].into(),
+                rotation: 0.0f32,
+                scale: [1.0f32, 1.0f32].into(),
+                offset: [0.0f32, 0.0f32].into(),
+            });
         } else {
-            if let Some(image) = &self.album_art {
-                let screen_coords: Rect = graphics::screen_coordinates(ctx);
-                let art_rect: Rect = image.dimensions();
-                let offset_x: f32 = (screen_coords.w.abs() - art_rect.w.abs()) / 2.0f32;
-                let offset_y: f32 = (screen_coords.h.abs() - art_rect.h.abs()) / 2.0f32;
-                self.album_art_draw_transform = Some(Transform::Values {
-                    dest: [offset_x, offset_y].into(),
-                    rotation: 0.0f32,
-                    scale: [1.0f32, 1.0f32].into(),
-                    offset: [0.0f32, 0.0f32].into(),
-                });
-            } else {
-                self.album_art_draw_transform = None;
-            }
+            self.album_art_draw_transform = None;
         }
     }
 
@@ -507,7 +500,7 @@ impl EventHandler for MPDDisplay {
 
         if self.is_valid && self.is_initialized && self.poll_instant.elapsed() > POLL_TIME {
             self.poll_instant = Instant::now();
-            if !self.dirty_flag.is_none()
+            if self.dirty_flag.is_some()
                 && self
                     .dirty_flag
                     .as_ref()
@@ -524,7 +517,7 @@ impl EventHandler for MPDDisplay {
                     .as_ref()
                     .unwrap()
                     .get_current_song_info()
-                    .map_or(None, |f| Some(f));
+                    .ok();
                 if let Some(shared) = &self.shared {
                     if self.notice_text.contents() != shared.error_text {
                         self.notice_text = Text::new(TextFragment::new(shared.error_text.clone()));
@@ -682,7 +675,7 @@ impl EventHandler for MPDDisplay {
             if keycode == event::KeyCode::Back {
                 let s: String = self.notice_text.contents();
 
-                if s.ends_with("*") {
+                if s.ends_with('*') {
                     self.notice_text = Text::new(TextFragment::new(s[0..(s.len() - 1)].to_owned()));
                 }
 
@@ -692,10 +685,8 @@ impl EventHandler for MPDDisplay {
             } else if keycode == event::KeyCode::Return {
                 self.password_entered = true;
             }
-        } else {
-            if keycode == event::KeyCode::H {
-                self.hide_text = true;
-            }
+        } else if keycode == event::KeyCode::H {
+            self.hide_text = true;
         }
     }
 
