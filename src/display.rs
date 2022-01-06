@@ -114,7 +114,7 @@ impl MPDDisplay {
             self.opts.password.clone().map_or(String::new(), |s| s),
             self.opts.log_level,
         )
-        .map_or_else(|_| None, Some);
+        .ok();
         if self.mpd_handler.is_some() {
             self.is_initialized = true;
             loop {
