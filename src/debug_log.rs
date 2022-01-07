@@ -1,9 +1,17 @@
 use std::fmt::Display;
 use structopt::clap::arg_enum;
 
+#[derive(Copy, Clone, Debug, PartialEq)]
+pub enum LogState {
+    ERROR,
+    WARNING,
+    DEBUG,
+    VERBOSE,
+}
+
 arg_enum! {
     #[derive(Copy, Clone, Debug, PartialEq)]
-    pub enum LogState {
+    pub enum LogLevel {
         ERROR,
         WARNING,
         DEBUG,
@@ -11,22 +19,22 @@ arg_enum! {
     }
 }
 
-pub fn log<T>(msg: T, level: LogState, state: LogState)
+pub fn log<T>(msg: T, state: LogState, level: LogLevel)
 where
     T: Display,
 {
-    if level == LogState::ERROR {
+    if state == LogState::ERROR {
         log_error(msg);
-    } else if level == LogState::WARNING {
-        if state != LogState::ERROR {
+    } else if state == LogState::WARNING {
+        if level != LogLevel::ERROR {
             log_warning(msg);
         }
-    } else if level == LogState::DEBUG {
-        if state == LogState::DEBUG || state == LogState::VERBOSE {
+    } else if state == LogState::DEBUG {
+        if level == LogLevel::DEBUG || level == LogLevel::VERBOSE {
             log_debug(msg);
         }
-    } else if level == LogState::VERBOSE {
-        if state == LogState::VERBOSE {
+    } else if state == LogState::VERBOSE {
+        if level == LogLevel::VERBOSE {
             log_verbose(msg);
         }
     } else {

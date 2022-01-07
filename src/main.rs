@@ -38,11 +38,11 @@ pub struct Opt {
     #[structopt(
         short = "l",
         long = "log-level",
-        possible_values = &debug_log::LogState::variants(),
+        possible_values = &debug_log::LogLevel::variants(),
         default_value = "ERROR",
         case_insensitive = true,
     )]
-    log_level: debug_log::LogState,
+    log_level: debug_log::LogLevel,
 }
 
 fn main() -> Result<(), String> {

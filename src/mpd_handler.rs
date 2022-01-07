@@ -1,4 +1,4 @@
-use crate::debug_log::{log, LogState};
+use crate::debug_log::{log, LogLevel, LogState};
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
@@ -65,7 +65,7 @@ pub struct MPDHandlerState {
     self_thread: Option<Arc<Mutex<thread::JoinHandle<Result<(), String>>>>>,
     dirty_flag: Arc<AtomicBool>,
     pub stop_flag: Arc<AtomicBool>,
-    log_level: LogState,
+    log_level: LogLevel,
 }
 
 fn check_next_chars(
@@ -228,7 +228,7 @@ impl MPDHandler {
         host: Ipv4Addr,
         port: u16,
         password: String,
-        log_level: LogState,
+        log_level: LogLevel,
     ) -> Result<Self, String> {
         let stream = TcpStream::connect_timeout(
             &SocketAddr::new(IpAddr::V4(host), port),
