@@ -142,8 +142,8 @@ fn main() -> Result<(), String> {
 
                 ctx.mouse_context.reset_delta();
 
-                // sleep to force 10-11 fps
-                thread::sleep(Duration::from_millis(90));
+                // sleep to force ~5 fps
+                thread::sleep(Duration::from_millis(200));
                 ggez::timer::yield_now();
             }
             x => log(
