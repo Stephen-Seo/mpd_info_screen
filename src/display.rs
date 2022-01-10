@@ -22,6 +22,7 @@ const TEXT_OFFSET_Y_SPACING: f32 = 0.4;
 const TEXT_HEIGHT_SCALE: f32 = 0.1;
 const ARTIST_HEIGHT_SCALE: f32 = 0.08;
 const TIMER_HEIGHT_SCALE: f32 = 0.07;
+const MIN_WIDTH_RATIO: f32 = 4.0 / 5.0;
 
 fn seconds_to_time(seconds: f64) -> String {
     let seconds_int: u64 = seconds.floor() as u64;
@@ -278,7 +279,7 @@ impl MPDDisplay {
                         current_x = current_x * 4.0f32 / 5.0f32;
                         current_y = current_y * 4.0f32 / 5.0f32;
                         continue;
-                    } else if screen_coords.w * 2.0 / 3.0 > width {
+                    } else if screen_coords.w * MIN_WIDTH_RATIO > width {
                         current_x = current_x * 5.0f32 / 4.0f32;
                         current_y = current_y * 5.0f32 / 4.0f32;
                         continue;
