@@ -220,29 +220,52 @@ impl MPDDisplay {
 
         match read_guard_opt.as_ref().unwrap().get_art_type().as_str() {
             "image/png" => image_format = image::ImageFormat::Png,
-            "image/jpg" | "image/jpeg" => image_format = image::ImageFormat::Jpeg,
+            "image/jpg" | "image/jpeg" | "JPG" => image_format = image::ImageFormat::Jpeg,
             "image/gif" => image_format = image::ImageFormat::Gif,
             _ => is_unknown_format = true,
         }
 
-        #[allow(unused_assignments)]
-        if is_unknown_format && !self.tried_album_art_in_dir {
-            self.tried_album_art_in_dir = true;
-            self.album_art = None;
+        let try_second_art_fetch_method = |tried_in_dir: &mut bool,
+                                           album_art: &mut Option<Image>,
+                                           read_guard_opt: &mut Option<
+            RwLockReadGuard<'_, MPDHandlerState>,
+        >,
+                                           mpd_handler: &Option<MPDHandler>|
+         -> Result<(), String> {
+            *tried_in_dir = true;
+            album_art.take();
             // Drop the "read_guard" so that the "force_try_other_album_art()"
             // can get a "write_guard"
-            read_guard_opt = None;
-            self.mpd_handler
+            read_guard_opt.take();
+            mpd_handler
                 .as_ref()
                 .unwrap()
                 .force_try_other_album_art()
                 .map_err(|_| String::from("Failed to force try other album art fetching method"))?;
             return Err("Got unknown format album art image".into());
+        };
+
+        if is_unknown_format && !self.tried_album_art_in_dir {
+            return try_second_art_fetch_method(
+                &mut self.tried_album_art_in_dir,
+                &mut self.album_art,
+                &mut read_guard_opt,
+                &self.mpd_handler,
+            );
         }
 
-        let img = ImageReader::with_format(Cursor::new(&image_ref), image_format)
+        let img_result = ImageReader::with_format(Cursor::new(&image_ref), image_format)
             .decode()
-            .map_err(|e| format!("ERROR: Failed to decode album art image: {}", e))?;
+            .map_err(|e| format!("ERROR: Failed to decode album art image: {}", e));
+        if img_result.is_err() && !self.tried_album_art_in_dir {
+            return try_second_art_fetch_method(
+                &mut self.tried_album_art_in_dir,
+                &mut self.album_art,
+                &mut read_guard_opt,
+                &self.mpd_handler,
+            );
+        }
+        let img = img_result?;
         let rgba8 = img.to_rgba8();
         let ggez_img = Image::from_rgba8(
             ctx,
