@@ -1,5 +1,5 @@
 use crate::debug_log::{self, log};
-use crate::mpd_handler::{InfoFromShared, MPDHandler};
+use crate::mpd_handler::{InfoFromShared, MPDHandler, MPDHandlerState};
 use crate::Opt;
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{
@@ -10,7 +10,7 @@ use ggez::{timer, Context, GameError, GameResult};
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
 use std::sync::atomic::AtomicBool;
-use std::sync::{atomic::Ordering, Arc};
+use std::sync::{atomic::Ordering, Arc, RwLockReadGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -76,6 +76,7 @@ pub struct MPDDisplay {
     length: f64,
     text_bg_mesh: Option<Mesh>,
     hide_text: bool,
+    tried_album_art_in_dir: bool,
 }
 
 impl MPDDisplay {
@@ -107,6 +108,7 @@ impl MPDDisplay {
             length: 0.0,
             text_bg_mesh: None,
             hide_text: false,
+            tried_album_art_in_dir: false,
         }
     }
 
@@ -191,24 +193,53 @@ impl MPDDisplay {
     }
 
     fn get_image_from_data(&mut self, ctx: &mut Context) -> Result<(), String> {
-        let read_guard = self
+        let mut read_guard_opt: Option<RwLockReadGuard<'_, MPDHandlerState>> = self
             .mpd_handler
             .as_ref()
             .unwrap()
             .get_state_read_guard()
-            .map_err(|_| String::from("Failed to get read_guard of MPDHandlerState"))?;
-        if !read_guard.is_art_data_ready() {
+            .ok();
+        if read_guard_opt.is_none() {
+            return Err(String::from("Failed to get read_guard of MPDHandlerState"));
+        } else if !read_guard_opt.as_ref().unwrap().is_art_data_ready() {
             return Err(String::from("MPDHandlerState does not have album art data"));
         }
-        let image_ref = read_guard.get_art_data();
+        let image_ref = read_guard_opt.as_ref().unwrap().get_art_data();
 
         let mut image_format: image::ImageFormat = image::ImageFormat::Png;
-        match read_guard.get_art_type().as_str() {
+        log(
+            format!(
+                "Got image_format type {}",
+                read_guard_opt.as_ref().unwrap().get_art_type()
+            ),
+            debug_log::LogState::DEBUG,
+            self.opts.log_level,
+        );
+
+        let mut is_unknown_format: bool = false;
+
+        match read_guard_opt.as_ref().unwrap().get_art_type().as_str() {
             "image/png" => image_format = image::ImageFormat::Png,
             "image/jpg" | "image/jpeg" => image_format = image::ImageFormat::Jpeg,
             "image/gif" => image_format = image::ImageFormat::Gif,
-            _ => (),
+            _ => is_unknown_format = true,
         }
+
+        #[allow(unused_assignments)]
+        if is_unknown_format && !self.tried_album_art_in_dir {
+            self.tried_album_art_in_dir = true;
+            self.album_art = None;
+            // Drop the "read_guard" so that the "force_try_other_album_art()"
+            // can get a "write_guard"
+            read_guard_opt = None;
+            self.mpd_handler
+                .as_ref()
+                .unwrap()
+                .force_try_other_album_art()
+                .map_err(|_| String::from("Failed to force try other album art fetching method"))?;
+            return Err("Got unknown format album art image".into());
+        }
+
         let img = ImageReader::with_format(Cursor::new(&image_ref), image_format)
             .decode()
             .map_err(|e| format!("ERROR: Failed to decode album art image: {}", e))?;
@@ -544,6 +575,7 @@ impl EventHandler for MPDDisplay {
                     if !shared.filename.is_empty() {
                         if self.filename_text.contents() != shared.filename {
                             self.album_art = None;
+                            self.tried_album_art_in_dir = false;
                         }
                         self.filename_text = Text::new(shared.filename.clone());
                     } else {
@@ -565,7 +597,7 @@ impl EventHandler for MPDDisplay {
                 if self.album_art.is_none() {
                     let result = self.get_image_from_data(ctx);
                     if let Err(e) = result {
-                        log(e, debug_log::LogState::DEBUG, self.opts.log_level);
+                        log(e, debug_log::LogState::WARNING, self.opts.log_level);
                         self.album_art = None;
                         self.album_art_draw_transform = None;
                     } else {

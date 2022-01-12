@@ -353,6 +353,15 @@ impl MPDHandler {
         Ok(())
     }
 
+    pub fn force_try_other_album_art(&self) -> Result<(), ()> {
+        let mut write_handle = self.state.try_write().map_err(|_| ())?;
+        write_handle.art_data.clear();
+        write_handle.art_data_size = 0;
+        write_handle.can_get_album_art = false;
+        write_handle.can_get_album_art_in_dir = true;
+        Ok(())
+    }
+
     fn handler_loop(self) -> Result<(), String> {
         let log_level = self
             .state
@@ -808,6 +817,15 @@ impl MPDHandlerState {
     }
 
     pub fn is_art_data_ready(&self) -> bool {
+        log(
+            format!(
+                "is_art_data_ready(): art_data_size == {}, art_data.len() == {}",
+                self.art_data_size,
+                self.art_data.len()
+            ),
+            LogState::DEBUG,
+            self.log_level,
+        );
         self.art_data_size != 0 && self.art_data.len() == self.art_data_size
     }
 
