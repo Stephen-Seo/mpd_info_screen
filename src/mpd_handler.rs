@@ -385,7 +385,10 @@ impl MPDHandler {
         }
 
         'main: loop {
-            if !self.is_reading_picture() {
+            if !self.is_reading_picture()
+                || (!self.is_authenticated().ok().unwrap_or(false)
+                    && !self.failed_to_authenticate().ok().unwrap_or(false))
+            {
                 thread::sleep(SLEEP_DURATION);
                 if let Ok(write_handle) = self.state.try_write() {
                     if write_handle.self_thread.is_none() {
@@ -415,7 +418,7 @@ impl MPDHandler {
             }
 
             if let Ok(read_handle) = self.state.try_read() {
-                if read_handle.stop_flag.load(Ordering::Relaxed) {
+                if read_handle.stop_flag.load(Ordering::Relaxed) || !read_handle.can_authenticate {
                     break 'main;
                 }
             }
@@ -557,7 +560,7 @@ impl MPDHandler {
                     write_handle.poll_state = PollState::None;
                     break 'handle_buf;
                 } else if line.starts_with("ACK") {
-                    log(line, LogState::Warning, write_handle.log_level);
+                    log(&line, LogState::Warning, write_handle.log_level);
                     match write_handle.poll_state {
                         PollState::Password => {
                             write_handle.can_authenticate = false;
@@ -569,6 +572,9 @@ impl MPDHandler {
                             write_handle.can_get_status = false;
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
                             write_handle.error_text = "Failed to get MPD status".into();
+                            if line.contains("don't have permission") {
+                                write_handle.can_authenticate = false;
+                            }
                         }
                         PollState::ReadPicture => {
                             write_handle.can_get_album_art = false;
