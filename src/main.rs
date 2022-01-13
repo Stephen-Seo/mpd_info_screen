@@ -39,7 +39,7 @@ pub struct Opt {
         short = "l",
         long = "log-level",
         possible_values = &debug_log::LogLevel::variants(),
-        default_value = "ERROR",
+        default_value = "Error",
         case_insensitive = true,
     )]
     log_level: debug_log::LogLevel,
@@ -120,7 +120,7 @@ fn main() -> Result<(), String> {
                 }
                 x => log(
                     format!("Other window event fired: {:?}", x),
-                    debug_log::LogState::VERBOSE,
+                    debug_log::LogState::Verbose,
                     opt.log_level,
                 ),
             },
@@ -129,13 +129,13 @@ fn main() -> Result<(), String> {
 
                 let mut game_result: Result<(), GameError> = display.update(ctx);
                 if game_result.is_err() {
-                    println!("ERROR update: {}", game_result.unwrap_err());
+                    println!("Error update: {}", game_result.unwrap_err());
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
                 game_result = display.draw(ctx);
                 if game_result.is_err() {
-                    println!("ERROR draw: {}", game_result.unwrap_err());
+                    println!("Error draw: {}", game_result.unwrap_err());
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
@@ -148,7 +148,7 @@ fn main() -> Result<(), String> {
             }
             x => log(
                 format!("Device event fired: {:?}", x),
-                debug_log::LogState::VERBOSE,
+                debug_log::LogState::Verbose,
                 opt.log_level,
             ),
         }

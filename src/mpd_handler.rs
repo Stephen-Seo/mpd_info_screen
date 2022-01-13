@@ -195,7 +195,7 @@ fn read_line(
                     buf_to_read = buf_to_read.split_off(2);
                     result = String::from("OK");
                     buf.append(&mut buf_to_read);
-                    //println!("WARNING: OK was reached"); // DEBUG
+                    //println!("Warning: OK was reached"); // DEBUG
                     return Ok(result);
                 }
             }
@@ -207,7 +207,7 @@ fn read_line(
             result.push(c);
             skip_count = s - 1;
         } else if let Err((msg, count)) = next_char_result {
-            //println!("ERROR: {}", msg); // DEBUG
+            //println!("Error: {}", msg); // DEBUG
             for i in 0..count {
                 saved.push(buf_to_read[idx + i as usize]);
             }
@@ -392,7 +392,7 @@ impl MPDHandler {
                         // main thread failed to store handle to this thread
                         log(
                             "MPDHandle thread stopping due to failed handle storage",
-                            LogState::ERROR,
+                            LogState::Error,
                             write_handle.log_level,
                         );
                         break 'main;
@@ -403,13 +403,13 @@ impl MPDHandler {
             if let Err(err_string) = self.handler_read_block(&mut buf, &mut saved, &mut saved_str) {
                 log(
                     format!("read_block error: {}", err_string),
-                    LogState::WARNING,
+                    LogState::Warning,
                     log_level,
                 );
             } else if let Err(err_string) = self.handler_write_block() {
                 log(
                     format!("write_block error: {}", err_string),
-                    LogState::WARNING,
+                    LogState::Warning,
                     log_level,
                 );
             }
@@ -425,7 +425,7 @@ impl MPDHandler {
 
         log(
             "MPDHandler thread entering exit loop",
-            LogState::DEBUG,
+            LogState::Debug,
             log_level,
         );
         'exit: loop {
@@ -479,7 +479,7 @@ impl MPDHandler {
                             write_handle.art_data.len(),
                             write_handle.art_data_size
                         ),
-                        LogState::DEBUG,
+                        LogState::Debug,
                         write_handle.log_level,
                     );
                     if write_handle.art_data.len() == write_handle.art_data_size {
@@ -494,7 +494,7 @@ impl MPDHandler {
                             write_handle.art_data.len(),
                             write_handle.art_data_size
                         ),
-                        LogState::DEBUG,
+                        LogState::Debug,
                         write_handle.log_level,
                     );
                     if write_handle.art_data.len() == write_handle.art_data_size {
@@ -512,7 +512,7 @@ impl MPDHandler {
                         write_handle.is_init = false;
                         log(
                             "Got initial \"OK\" from MPD",
-                            LogState::DEBUG,
+                            LogState::Debug,
                             write_handle.log_level,
                         );
                         write_handle.poll_state = PollState::None;
@@ -525,7 +525,7 @@ impl MPDHandler {
                 if line.starts_with("OK") {
                     log(
                         format!("Got OK when poll state is {:?}", write_handle.poll_state),
-                        LogState::DEBUG,
+                        LogState::Debug,
                         write_handle.log_level,
                     );
                     match write_handle.poll_state {
@@ -536,7 +536,7 @@ impl MPDHandler {
                                 write_handle.dirty_flag.store(true, Ordering::Relaxed);
                                 log(
                                     "No embedded album art",
-                                    LogState::WARNING,
+                                    LogState::Warning,
                                     write_handle.log_level,
                                 );
                             }
@@ -547,7 +547,7 @@ impl MPDHandler {
                                 write_handle.dirty_flag.store(true, Ordering::Relaxed);
                                 log(
                                     "No album art in dir",
-                                    LogState::WARNING,
+                                    LogState::Warning,
                                     write_handle.log_level,
                                 );
                             }
@@ -557,7 +557,7 @@ impl MPDHandler {
                     write_handle.poll_state = PollState::None;
                     break 'handle_buf;
                 } else if line.starts_with("ACK") {
-                    log(line, LogState::WARNING, write_handle.log_level);
+                    log(line, LogState::Warning, write_handle.log_level);
                     match write_handle.poll_state {
                         PollState::Password => {
                             write_handle.can_authenticate = false;
@@ -575,7 +575,7 @@ impl MPDHandler {
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
                             log(
                                 "Failed to get readpicture",
-                                LogState::WARNING,
+                                LogState::Warning,
                                 write_handle.log_level,
                             );
                             // Not setting error_text here since
@@ -586,7 +586,7 @@ impl MPDHandler {
                             write_handle.dirty_flag.store(true, Ordering::Relaxed);
                             log(
                                 "Failed to get albumart",
-                                LogState::WARNING,
+                                LogState::Warning,
                                 write_handle.log_level,
                             );
                             write_handle.error_text = "Failed to get album art from MPD".into();
@@ -622,7 +622,7 @@ impl MPDHandler {
                     } else {
                         log(
                             "Failed to parse current song position",
-                            LogState::WARNING,
+                            LogState::Warning,
                             write_handle.log_level,
                         );
                     }
@@ -635,7 +635,7 @@ impl MPDHandler {
                     } else {
                         log(
                             "Failed to parse current song duration",
-                            LogState::WARNING,
+                            LogState::Warning,
                             write_handle.log_level,
                         );
                     }
@@ -647,7 +647,7 @@ impl MPDHandler {
                     } else {
                         log(
                             "Failed to parse album art byte size",
-                            LogState::WARNING,
+                            LogState::Warning,
                             write_handle.log_level,
                         );
                     }
@@ -658,7 +658,7 @@ impl MPDHandler {
                     } else {
                         log(
                             "Failed to parse album art chunk byte size",
-                            LogState::WARNING,
+                            LogState::Warning,
                             write_handle.log_level,
                         );
                     }
@@ -671,7 +671,7 @@ impl MPDHandler {
                 } else {
                     log(
                         format!("Got unrecognized/ignored line: {}", line),
-                        LogState::WARNING,
+                        LogState::Warning,
                         write_handle.log_level,
                     );
                 }
@@ -683,7 +683,7 @@ impl MPDHandler {
                         saved.len(),
                         read_line_in_progress.len()
                     ),
-                    LogState::WARNING,
+                    LogState::Warning,
                     write_handle.log_level,
                 );
                 *saved_str = read_line_in_progress;
@@ -725,7 +725,7 @@ impl MPDHandler {
                 } else if let Err(e) = write_result {
                     log(
                         format!("Failed to send password for authentication: {}", e),
-                        LogState::ERROR,
+                        LogState::Error,
                         write_handle.log_level,
                     );
                 }
@@ -740,7 +740,7 @@ impl MPDHandler {
                 } else if let Err(e) = write_result {
                     log(
                         format!("Failed to request song info over stream: {}", e),
-                        LogState::ERROR,
+                        LogState::Error,
                         write_handle.log_level,
                     );
                 }
@@ -756,7 +756,7 @@ impl MPDHandler {
                 } else if let Err(e) = write_result {
                     log(
                         format!("Failed to request status over stream: {}", e),
-                        LogState::ERROR,
+                        LogState::Error,
                         write_handle.log_level,
                     );
                 }
@@ -775,7 +775,7 @@ impl MPDHandler {
                     } else if let Err(e) = write_result {
                         log(
                             format!("Failed to request album art: {}", e),
-                            LogState::ERROR,
+                            LogState::Error,
                             write_handle.log_level,
                         );
                     }
@@ -788,7 +788,7 @@ impl MPDHandler {
                     } else if let Err(e) = write_result {
                         log(
                             format!("Failed to request album art in dir: {}", e),
-                            LogState::ERROR,
+                            LogState::Error,
                             write_handle.log_level,
                         );
                     }
@@ -823,7 +823,7 @@ impl MPDHandlerState {
                 self.art_data_size,
                 self.art_data.len()
             ),
-            LogState::DEBUG,
+            LogState::Debug,
             self.log_level,
         );
         self.art_data_size != 0 && self.art_data.len() == self.art_data_size

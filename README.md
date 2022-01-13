@@ -9,7 +9,7 @@ counter, and the filename currently being played
 
 # Usage
 
-    mpd_info_screen 0.2.13
+    mpd_info_screen 0.2.14
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
@@ -24,12 +24,13 @@ counter, and the filename currently being played
         -V, --version                  Prints version information
     
     OPTIONS:
-        -l, --log-level <log-level>     [default: ERROR]  [possible values: ERROR, WARNING, DEBUG, VERBOSE]
+        -l, --log-level <log-level>     [default: Error]  [possible values: Error, Warning, Debug, Verbose]
         -p <password>
     
     ARGS:
         <host>
         <port>     [default: 6600]
+
 
 Note that presing the Escape key when the window is focused closes the program.
 

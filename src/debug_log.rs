@@ -3,19 +3,19 @@ use structopt::clap::arg_enum;
 
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub enum LogState {
-    ERROR,
-    WARNING,
-    DEBUG,
-    VERBOSE,
+    Error,
+    Warning,
+    Debug,
+    Verbose,
 }
 
 arg_enum! {
     #[derive(Copy, Clone, Debug, PartialEq)]
     pub enum LogLevel {
-        ERROR,
-        WARNING,
-        DEBUG,
-        VERBOSE,
+        Error,
+        Warning,
+        Debug,
+        Verbose,
     }
 }
 
@@ -23,18 +23,18 @@ pub fn log<T>(msg: T, state: LogState, level: LogLevel)
 where
     T: Display,
 {
-    if state == LogState::ERROR {
+    if state == LogState::Error {
         log_error(msg);
-    } else if state == LogState::WARNING {
-        if level != LogLevel::ERROR {
+    } else if state == LogState::Warning {
+        if level != LogLevel::Error {
             log_warning(msg);
         }
-    } else if state == LogState::DEBUG {
-        if level == LogLevel::DEBUG || level == LogLevel::VERBOSE {
+    } else if state == LogState::Debug {
+        if level == LogLevel::Debug || level == LogLevel::Verbose {
             log_debug(msg);
         }
-    } else if state == LogState::VERBOSE {
-        if level == LogLevel::VERBOSE {
+    } else if state == LogState::Verbose {
+        if level == LogLevel::Verbose {
             log_verbose(msg);
         }
     } else {
@@ -46,26 +46,26 @@ pub fn log_error<T>(msg: T)
 where
     T: Display,
 {
-    println!("ERROR: {}", msg);
+    println!("Error: {}", msg);
 }
 
 pub fn log_warning<T>(msg: T)
 where
     T: Display,
 {
-    println!("WARNING: {}", msg);
+    println!("Warning: {}", msg);
 }
 
 pub fn log_debug<T>(msg: T)
 where
     T: Display,
 {
-    println!("DEBUG: {}", msg);
+    println!("Debug: {}", msg);
 }
 
 pub fn log_verbose<T>(msg: T)
 where
     T: Display,
 {
-    println!("VERBOSE: {}", msg);
+    println!("Verbose: {}", msg);
 }

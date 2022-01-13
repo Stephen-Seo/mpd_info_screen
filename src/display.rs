@@ -132,14 +132,14 @@ impl MPDDisplay {
             }
             log(
                 "Successfully initialized MPDHandler",
-                debug_log::LogState::DEBUG,
+                debug_log::LogState::Debug,
                 self.opts.log_level,
             );
         } else {
             self.is_valid = false;
             log(
                 "Failed to initialize MPDHandler",
-                debug_log::LogState::DEBUG,
+                debug_log::LogState::Debug,
                 self.opts.log_level,
             );
         }
@@ -212,7 +212,7 @@ impl MPDDisplay {
                 "Got image_format type {}",
                 read_guard_opt.as_ref().unwrap().get_art_type()
             ),
-            debug_log::LogState::DEBUG,
+            debug_log::LogState::Debug,
             self.opts.log_level,
         );
 
@@ -242,7 +242,7 @@ impl MPDDisplay {
                 .unwrap()
                 .force_try_other_album_art()
                 .map_err(|_| String::from("Failed to force try other album art fetching method"))?;
-            return Err("Got unknown format album art image".into());
+            Err("Got unknown format album art image".into())
         };
 
         if is_unknown_format && !self.tried_album_art_in_dir {
@@ -256,7 +256,7 @@ impl MPDDisplay {
 
         let img_result = ImageReader::with_format(Cursor::new(&image_ref), image_format)
             .decode()
-            .map_err(|e| format!("ERROR: Failed to decode album art image: {}", e));
+            .map_err(|e| format!("Error: Failed to decode album art image: {}", e));
         if img_result.is_err() && !self.tried_album_art_in_dir {
             return try_second_art_fetch_method(
                 &mut self.tried_album_art_in_dir,
@@ -273,7 +273,7 @@ impl MPDDisplay {
             rgba8.height() as u16,
             rgba8.as_raw(),
         )
-        .map_err(|e| format!("ERROR: Failed to load album art image in ggez Image: {}", e))?;
+        .map_err(|e| format!("Error: Failed to load album art image in ggez Image: {}", e))?;
 
         self.album_art = Some(ggez_img);
 
@@ -332,12 +332,12 @@ impl MPDDisplay {
                                 text_height_limit
                             })
                     {
-                        current_x = current_x * DECREASE_AMT;
-                        current_y = current_y * DECREASE_AMT;
+                        current_x *= DECREASE_AMT;
+                        current_y *= DECREASE_AMT;
                         continue;
                     } else if screen_coords.w * MIN_WIDTH_RATIO > width {
-                        current_x = current_x * INCREASE_AMT;
-                        current_y = current_y * INCREASE_AMT;
+                        current_x *= INCREASE_AMT;
+                        current_y *= INCREASE_AMT;
                         continue;
                     } else {
                         break;
@@ -385,7 +385,7 @@ impl MPDDisplay {
         } else {
             log(
                 "filename text is empty",
-                debug_log::LogState::WARNING,
+                debug_log::LogState::Warning,
                 self.opts.log_level,
             );
         }
@@ -404,7 +404,7 @@ impl MPDDisplay {
         } else {
             log(
                 "artist text is empty",
-                debug_log::LogState::WARNING,
+                debug_log::LogState::Warning,
                 self.opts.log_level,
             );
         }
@@ -423,7 +423,7 @@ impl MPDDisplay {
         } else {
             log(
                 "title text is empty",
-                debug_log::LogState::WARNING,
+                debug_log::LogState::Warning,
                 self.opts.log_level,
             );
         }
@@ -566,7 +566,7 @@ impl EventHandler for MPDDisplay {
             {
                 log(
                     "dirty_flag cleared, acquiring shared data...",
-                    debug_log::LogState::DEBUG,
+                    debug_log::LogState::Debug,
                     self.opts.log_level,
                 );
                 self.shared = self
@@ -613,14 +613,14 @@ impl EventHandler for MPDDisplay {
                 } else {
                     log(
                         "Failed to acquire read lock for getting shared data",
-                        debug_log::LogState::DEBUG,
+                        debug_log::LogState::Debug,
                         self.opts.log_level,
                     );
                 }
                 if self.album_art.is_none() {
                     let result = self.get_image_from_data(ctx);
                     if let Err(e) = result {
-                        log(e, debug_log::LogState::WARNING, self.opts.log_level);
+                        log(e, debug_log::LogState::Warning, self.opts.log_level);
                         self.album_art = None;
                         self.album_art_draw_transform = None;
                     } else {
