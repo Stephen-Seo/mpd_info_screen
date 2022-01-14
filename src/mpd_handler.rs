@@ -386,8 +386,8 @@ impl MPDHandler {
 
         'main: loop {
             if !self.is_reading_picture()
-                || (!self.is_authenticated().unwrap_or(false)
-                    && !self.failed_to_authenticate().unwrap_or(false))
+                && self.is_authenticated().unwrap_or(true)
+                && !self.failed_to_authenticate().unwrap_or(false)
             {
                 thread::sleep(SLEEP_DURATION);
                 if let Ok(write_handle) = self.state.try_write() {
