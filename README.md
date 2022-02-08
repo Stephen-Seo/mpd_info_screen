@@ -1,5 +1,9 @@
 # mpd info screen
 
+![mpd info screen crates.io badge](https://img.shields.io/crates/v/mpd_info_screen)
+
+[Github Repository](https://github.com/Stephen-Seo/mpd_info_screen)
+
 ![mpd info screen preview image](https://git.seodisparate.com/stephenseo/mpd_info_screen/raw/branch/images/images/mpd_info_screen_preview_image.jpg)
 
 A Rust program that displays info about the currently running MPD server.
