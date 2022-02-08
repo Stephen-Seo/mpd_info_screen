@@ -1,6 +1,6 @@
 # mpd info screen
 
-![mpd info screen crates.io badge](https://img.shields.io/crates/v/mpd_info_screen)
+[![mpd info screen crates.io badge](https://img.shields.io/crates/v/mpd_info_screen)](https://crates.io/crates/mpd_info_screen)
 
 [Github Repository](https://github.com/Stephen-Seo/mpd_info_screen)
 
