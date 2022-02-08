@@ -13,7 +13,7 @@ counter, and the filename currently being played
 
 # Usage
 
-    mpd_info_screen 0.2.16
+    mpd_info_screen 0.2.17
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]

@@ -1427,7 +1427,7 @@ dependencies = [
 
 [[package]]
 name = "mpd_info_screen"
-version = "0.2.16"
+version = "0.2.17"
 dependencies = [
  "ggez",
  "image",
