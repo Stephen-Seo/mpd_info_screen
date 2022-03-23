@@ -11,7 +11,7 @@ const SLEEP_DURATION: Duration = Duration::from_millis(100);
 const POLL_DURATION: Duration = Duration::from_secs(5);
 const BUF_SIZE: usize = 1024 * 4;
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum PollState {
     None,
     Password,
@@ -19,6 +19,13 @@ enum PollState {
     Status,
     ReadPicture,
     ReadPictureInDir,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum MPDPlayState {
+    Playing,
+    Paused,
+    Stopped,
 }
 
 #[derive(Debug, Clone)]
@@ -29,6 +36,7 @@ pub struct InfoFromShared {
     pub length: f64,
     pub pos: f64,
     pub error_text: String,
+    pub mpd_play_state: MPDPlayState,
 }
 
 #[derive(Clone)]
@@ -66,6 +74,7 @@ pub struct MPDHandlerState {
     dirty_flag: Arc<AtomicBool>,
     pub stop_flag: Arc<AtomicBool>,
     log_level: LogLevel,
+    mpd_play_state: MPDPlayState,
 }
 
 fn check_next_chars(
@@ -267,6 +276,7 @@ impl MPDHandler {
                 dirty_flag: Arc::new(AtomicBool::new(true)),
                 stop_flag: Arc::new(AtomicBool::new(false)),
                 log_level,
+                mpd_play_state: MPDPlayState::Stopped,
             })),
         };
 
@@ -285,7 +295,7 @@ impl MPDHandler {
         Ok(s)
     }
 
-    pub fn get_current_song_info(&self) -> Result<InfoFromShared, ()> {
+    pub fn get_mpd_handler_shared_state(&self) -> Result<InfoFromShared, ()> {
         if let Ok(read_lock) = self.state.try_read() {
             return Ok(InfoFromShared {
                 filename: read_lock.current_song_filename.clone(),
@@ -295,6 +305,7 @@ impl MPDHandler {
                 pos: read_lock.current_song_position
                     + read_lock.song_pos_get_time.elapsed().as_secs_f64(),
                 error_text: read_lock.error_text.clone(),
+                mpd_play_state: read_lock.mpd_play_state,
             });
         }
 
@@ -468,6 +479,8 @@ impl MPDHandler {
         }
         let mut buf_vec: Vec<u8> = Vec::from(&buf[0..read_amount]);
 
+        let mut got_mpd_state: MPDPlayState = MPDPlayState::Playing;
+
         'handle_buf: loop {
             if write_handle.current_binary_size > 0 {
                 if write_handle.current_binary_size <= buf_vec.len() {
@@ -600,6 +613,40 @@ impl MPDHandler {
                         _ => (),
                     }
                     write_handle.poll_state = PollState::None;
+                } else if line.starts_with("state: ") {
+                    let remaining = line.split_off(7);
+                    let remaining = remaining.trim();
+                    if remaining == "stop" {
+                        write_handle.current_song_filename.clear();
+                        write_handle.art_data.clear();
+                        write_handle.art_data_size = 0;
+                        write_handle.art_data_type.clear();
+                        write_handle.can_get_album_art = true;
+                        write_handle.can_get_album_art_in_dir = true;
+                        write_handle.current_song_title.clear();
+                        write_handle.current_song_artist.clear();
+                        write_handle.current_song_length = 0.0;
+                        write_handle.current_song_position = 0.0;
+                        write_handle.did_check_overtime = false;
+                        write_handle.force_get_status = true;
+                    }
+                    if remaining == "stop" || remaining == "pause" {
+                        got_mpd_state = if remaining == "stop" {
+                            MPDPlayState::Stopped
+                        } else {
+                            MPDPlayState::Paused
+                        };
+                        write_handle.error_text.clear();
+                        write_handle
+                            .error_text
+                            .push_str(&format!("MPD has {:?}", got_mpd_state));
+                        log(
+                            format!("MPD is {:?}", got_mpd_state),
+                            LogState::Warning,
+                            write_handle.log_level,
+                        );
+                        break 'handle_buf;
+                    }
                 } else if line.starts_with("file: ") {
                     let song_file = line.split_off(6);
                     if song_file != write_handle.current_song_filename {
@@ -699,6 +746,20 @@ impl MPDHandler {
             }
         } // 'handle_buf: loop
 
+        if got_mpd_state != write_handle.mpd_play_state {
+            write_handle.dirty_flag.store(true, Ordering::Relaxed);
+            if got_mpd_state == MPDPlayState::Playing {
+                write_handle.error_text.clear();
+            }
+        }
+        write_handle.mpd_play_state = got_mpd_state;
+        if got_mpd_state != MPDPlayState::Playing {
+            write_handle.poll_state = PollState::None;
+            write_handle.song_pos_get_time = Instant::now();
+            write_handle.current_song_length = 30.0;
+            write_handle.current_song_position = 0.0;
+        }
+
         Ok(())
     }
 
@@ -738,6 +799,7 @@ impl MPDHandler {
             } else if write_handle.can_get_status
                 && (write_handle.song_title_get_time.elapsed() > POLL_DURATION
                     || write_handle.force_get_current_song)
+                && write_handle.mpd_play_state == MPDPlayState::Playing
             {
                 write_handle.force_get_current_song = false;
                 let write_result = write_handle.stream.write(b"currentsong\n");

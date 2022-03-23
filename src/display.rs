@@ -1,5 +1,5 @@
 use crate::debug_log::{self, log};
-use crate::mpd_handler::{InfoFromShared, MPDHandler, MPDHandlerState};
+use crate::mpd_handler::{InfoFromShared, MPDHandler, MPDHandlerState, MPDPlayState};
 use crate::Opt;
 use ggez::event::{self, EventHandler};
 use ggez::graphics::{
@@ -77,6 +77,7 @@ pub struct MPDDisplay {
     text_bg_mesh: Option<Mesh>,
     hide_text: bool,
     tried_album_art_in_dir: bool,
+    mpd_play_state: MPDPlayState,
 }
 
 impl MPDDisplay {
@@ -109,6 +110,7 @@ impl MPDDisplay {
             text_bg_mesh: None,
             hide_text: false,
             tried_album_art_in_dir: false,
+            mpd_play_state: MPDPlayState::Playing,
         }
     }
 
@@ -573,43 +575,56 @@ impl EventHandler for MPDDisplay {
                     .mpd_handler
                     .as_ref()
                     .unwrap()
-                    .get_current_song_info()
+                    .get_mpd_handler_shared_state()
                     .ok();
                 if let Some(shared) = &self.shared {
                     if self.notice_text.contents() != shared.error_text {
                         self.notice_text = Text::new(TextFragment::new(shared.error_text.clone()));
                     }
-                    if !shared.title.is_empty() {
-                        self.title_text = Text::new(shared.title.clone());
-                    } else {
-                        self.dirty_flag
-                            .as_ref()
-                            .unwrap()
-                            .store(true, Ordering::Relaxed);
-                    }
-                    if !shared.artist.is_empty() {
-                        self.artist_text = Text::new(shared.artist.clone());
-                    } else {
-                        self.dirty_flag
-                            .as_ref()
-                            .unwrap()
-                            .store(true, Ordering::Relaxed);
-                    }
-                    if !shared.filename.is_empty() {
-                        if self.filename_text.contents() != shared.filename {
+                    if shared.mpd_play_state != MPDPlayState::Playing {
+                        if shared.mpd_play_state == MPDPlayState::Stopped {
+                            self.title_text = Text::new("");
+                            self.artist_text = Text::new("");
+                            self.filename_text = Text::new("");
+                            self.timer = 0.0;
+                            self.length = 0.0;
                             self.album_art = None;
-                            self.tried_album_art_in_dir = false;
                         }
-                        self.filename_text = Text::new(shared.filename.clone());
+                        self.mpd_play_state = shared.mpd_play_state;
                     } else {
-                        self.dirty_flag
-                            .as_ref()
-                            .unwrap()
-                            .store(true, Ordering::Relaxed);
+                        self.mpd_play_state = MPDPlayState::Playing;
+                        if !shared.title.is_empty() {
+                            self.title_text = Text::new(shared.title.clone());
+                        } else {
+                            self.dirty_flag
+                                .as_ref()
+                                .unwrap()
+                                .store(true, Ordering::Relaxed);
+                        }
+                        if !shared.artist.is_empty() {
+                            self.artist_text = Text::new(shared.artist.clone());
+                        } else {
+                            self.dirty_flag
+                                .as_ref()
+                                .unwrap()
+                                .store(true, Ordering::Relaxed);
+                        }
+                        if !shared.filename.is_empty() {
+                            if self.filename_text.contents() != shared.filename {
+                                self.album_art = None;
+                                self.tried_album_art_in_dir = false;
+                            }
+                            self.filename_text = Text::new(shared.filename.clone());
+                        } else {
+                            self.dirty_flag
+                                .as_ref()
+                                .unwrap()
+                                .store(true, Ordering::Relaxed);
+                        }
+                        self.timer = shared.pos;
+                        self.length = shared.length;
+                        self.refresh_text_transforms(ctx)?;
                     }
-                    self.timer = shared.pos;
-                    self.length = shared.length;
-                    self.refresh_text_transforms(ctx)?;
                 } else {
                     log(
                         "Failed to acquire read lock for getting shared data",
@@ -648,7 +663,10 @@ impl EventHandler for MPDDisplay {
     fn draw(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         graphics::clear(ctx, Color::BLACK);
 
-        if self.album_art.is_some() && self.album_art_draw_transform.is_some() {
+        if self.mpd_play_state != MPDPlayState::Stopped
+            && self.album_art.is_some()
+            && self.album_art_draw_transform.is_some()
+        {
             self.album_art.as_ref().unwrap().draw(
                 ctx,
                 DrawParam {
@@ -661,7 +679,8 @@ impl EventHandler for MPDDisplay {
         if !self.hide_text {
             self.notice_text.draw(ctx, DrawParam::default())?;
 
-            if self.is_valid && self.is_initialized {
+            if self.mpd_play_state != MPDPlayState::Stopped && self.is_valid && self.is_initialized
+            {
                 if let Some(mesh) = &self.text_bg_mesh {
                     mesh.draw(ctx, DrawParam::default())?;
                 }
@@ -696,13 +715,15 @@ impl EventHandler for MPDDisplay {
                     )?;
                 }
 
-                self.timer_text.draw(
-                    ctx,
-                    DrawParam {
-                        trans: self.timer_transform,
-                        ..Default::default()
-                    },
-                )?;
+                if self.mpd_play_state == MPDPlayState::Playing {
+                    self.timer_text.draw(
+                        ctx,
+                        DrawParam {
+                            trans: self.timer_transform,
+                            ..Default::default()
+                        },
+                    )?;
+                }
             }
         }
 
