@@ -51,7 +51,7 @@ fn seconds_to_time(seconds: f64) -> String {
 
 pub struct MPDDisplay {
     opts: Opt,
-    mpd_handler: Option<MPDHandler>,
+    mpd_handler: Result<MPDHandler, String>,
     is_valid: bool,
     is_initialized: bool,
     is_authenticated: bool,
@@ -84,7 +84,7 @@ impl MPDDisplay {
     pub fn new(_ctx: &mut Context, opts: Opt) -> Self {
         Self {
             opts,
-            mpd_handler: None,
+            mpd_handler: Err(String::from("Uninitialized")),
             is_valid: true,
             is_initialized: false,
             is_authenticated: false,
@@ -120,9 +120,8 @@ impl MPDDisplay {
             self.opts.port,
             self.opts.password.clone().map_or(String::new(), |s| s),
             self.opts.log_level,
-        )
-        .ok();
-        if self.mpd_handler.is_some() {
+        );
+        if self.mpd_handler.is_ok() {
             self.is_initialized = true;
             loop {
                 self.dirty_flag = self.mpd_handler.as_ref().unwrap().get_dirty_flag().ok();
@@ -232,7 +231,7 @@ impl MPDDisplay {
                                            read_guard_opt: &mut Option<
             RwLockReadGuard<'_, MPDHandlerState>,
         >,
-                                           mpd_handler: &Option<MPDHandler>|
+                                           mpd_handler: &Result<MPDHandler, String>|
          -> Result<(), String> {
             *tried_in_dir = true;
             album_art.take();
@@ -505,9 +504,16 @@ impl MPDDisplay {
 impl EventHandler for MPDDisplay {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         if !self.is_valid {
-            return Err(GameError::EventLoopError(
-                "Failed to initialize MPDHandler".into(),
-            ));
+            if let Err(mpd_handler_error) = &self.mpd_handler {
+                return Err(GameError::EventLoopError(format!(
+                    "Failed to initialize MPDHandler: {}",
+                    mpd_handler_error
+                )));
+            } else {
+                return Err(GameError::EventLoopError(
+                    "Failed to initialize MPDHandler".into(),
+                ));
+            }
         }
 
         if !self.is_initialized {

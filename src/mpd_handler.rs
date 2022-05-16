@@ -243,7 +243,7 @@ impl MPDHandler {
             &SocketAddr::new(IpAddr::V4(host), port),
             Duration::from_secs(5),
         )
-        .map_err(|_| String::from("Failed to get TCP connection"))?;
+        .map_err(|_| String::from("Failed to get TCP connection (is MPD running?)"))?;
 
         let s = MPDHandler {
             state: Arc::new(RwLock::new(MPDHandlerState {
@@ -587,6 +587,7 @@ impl MPDHandler {
                             write_handle.error_text = "Failed to get MPD status".into();
                             if line.contains("don't have permission") {
                                 write_handle.can_authenticate = false;
+                                write_handle.error_text.push_str(" (not authenticated?)");
                             }
                         }
                         PollState::ReadPicture => {
