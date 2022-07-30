@@ -1,6 +1,8 @@
 mod debug_log;
 mod display;
 mod mpd_handler;
+#[cfg(feature = "unicode_support")]
+mod unicode_support;
 
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::winit_event::{ElementState, KeyboardInput, ModifiersState};
