@@ -1,7 +1,7 @@
+#[cfg(feature = "unicode_support")]
+use bindgen;
 use std::env;
 use std::path::PathBuf;
-
-use bindgen;
 
 #[cfg(not(feature = "unicode_support"))]
 fn main() {}
