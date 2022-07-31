@@ -49,6 +49,17 @@ fn seconds_to_time(seconds: f64) -> String {
     result
 }
 
+#[cfg(not(feature = "unicode_support"))]
+fn string_to_text(string: String) -> Text {
+    Text::new(TextFragment::from(string))
+}
+
+#[cfg(feature = "unicode_support")]
+fn string_to_text(string: String) -> Text {
+    // TODO impl
+    Text::new(TextFragment::from(string))
+}
+
 pub struct MPDDisplay {
     opts: Opt,
     mpd_handler: Result<MPDHandler, String>,
@@ -314,13 +325,12 @@ impl MPDDisplay {
                     break;
                 }
 
-                text.set_font(
-                    Font::default(),
-                    PxScale {
+                for fragment in text.fragments_mut() {
+                    fragment.scale = Some(PxScale {
                         x: current_x,
                         y: current_y,
-                    },
-                );
+                    });
+                }
                 width = text.width(ctx);
                 height = text.height(ctx);
 
@@ -346,13 +356,12 @@ impl MPDDisplay {
                 } else {
                     let diff_scale_y = current_y / height * timer_height;
                     let current_x = current_x * diff_scale_y / current_y;
-                    text.set_font(
-                        Font::default(),
-                        PxScale {
+                    for fragment in text.fragments_mut() {
+                        fragment.scale = Some(PxScale {
                             x: current_x,
-                            y: diff_scale_y,
-                        },
-                    );
+                            y: current_y,
+                        });
+                    }
                     *timer_x = current_x;
                     *timer_y = diff_scale_y;
                     // width = text.width(ctx); // not really used after this
@@ -600,7 +609,7 @@ impl EventHandler for MPDDisplay {
                     } else {
                         self.mpd_play_state = MPDPlayState::Playing;
                         if !shared.title.is_empty() {
-                            self.title_text = Text::new(shared.title.clone());
+                            self.title_text = string_to_text(shared.title.clone());
                         } else {
                             self.dirty_flag
                                 .as_ref()
@@ -608,7 +617,7 @@ impl EventHandler for MPDDisplay {
                                 .store(true, Ordering::Relaxed);
                         }
                         if !shared.artist.is_empty() {
-                            self.artist_text = Text::new(shared.artist.clone());
+                            self.artist_text = string_to_text(shared.artist.clone());
                         } else {
                             self.dirty_flag
                                 .as_ref()
@@ -620,7 +629,7 @@ impl EventHandler for MPDDisplay {
                                 self.album_art = None;
                                 self.tried_album_art_in_dir = false;
                             }
-                            self.filename_text = Text::new(shared.filename.clone());
+                            self.filename_text = string_to_text(shared.filename.clone());
                         } else {
                             self.dirty_flag
                                 .as_ref()
