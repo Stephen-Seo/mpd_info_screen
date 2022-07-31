@@ -13,7 +13,9 @@ structopt = "0.3"
 image = "0.24"
 ggez = "0.7"
 freetype = { version = "0.7", optional = true }
-fontconfig = { version = "0.5", optional = true }
+
+[build-dependencies]
+bindgen = { version = "0.53", optional = true }
 
 [features]
-unicode_support = ["dep:freetype", "dep:fontconfig"]
+unicode_support = ["dep:freetype", "dep:bindgen"]
