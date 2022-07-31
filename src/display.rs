@@ -359,7 +359,7 @@ impl MPDDisplay {
                     for fragment in text.fragments_mut() {
                         fragment.scale = Some(PxScale {
                             x: current_x,
-                            y: current_y,
+                            y: diff_scale_y,
                         });
                     }
                     *timer_x = current_x;
