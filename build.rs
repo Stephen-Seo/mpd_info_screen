@@ -4,8 +4,7 @@ use std::path::PathBuf;
 use bindgen;
 
 #[cfg(not(feature = "unicode_support"))]
-fn main() {
-}
+fn main() {}
 
 #[cfg(feature = "unicode_support")]
 fn main() {
