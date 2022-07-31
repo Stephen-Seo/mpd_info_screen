@@ -53,7 +53,7 @@ mod ffi {
                 let cstring: CString = CString::from_vec_unchecked(
                     path.as_os_str().to_str().unwrap().as_bytes().to_vec(),
                 );
-                let mut args = FT_Open_Args {
+                let args = FT_Open_Args {
                     flags: FT_OPEN_PATHNAME,
                     memory_base: 0 as *const u8,
                     memory_size: 0,
