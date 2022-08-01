@@ -81,3 +81,6 @@ Uses dependency
 
 Uses dependency [freetype](https://freetype.org) which is
 [licensed with this license](https://freetype.org/license.html).
+
+Uses dependency [bindgen](https://crates.io/crates/bindgen) which is licenced
+under the BSD-3-Clause.
