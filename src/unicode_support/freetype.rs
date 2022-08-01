@@ -27,7 +27,7 @@ mod ffi {
         pub fn new() -> Option<FTLibrary> {
             unsafe {
                 let mut library_ptr: FT_Library = 0 as FT_Library;
-                if FT_Init_FreeType(&mut library_ptr) != 0 {
+                if FT_Init_FreeType(&mut library_ptr) == 0 {
                     Some(FTLibrary {
                         library: library_ptr,
                     })
@@ -98,7 +98,7 @@ mod ffi {
     }
 
     impl FTFaces {
-        pub fn new(library: &FTLibrary, args: &mut FTOpenArgs) -> Result<FTFaces, ()> {
+        pub fn new(library: &FTLibrary, args: &mut FTOpenArgs) -> Result<FTFaces, String> {
             let mut faces = FTFaces { faces: Vec::new() };
             unsafe {
                 let mut face: FT_Face = 0 as FT_Face;
@@ -111,7 +111,7 @@ mod ffi {
                 );
                 if result != 0 {
                     FT_Done_Face(face);
-                    return Err(());
+                    return Err(String::from("Failed to get number of faces"));
                 }
                 let count = (*face).num_faces;
 
@@ -124,7 +124,7 @@ mod ffi {
                     );
                     if result != 0 {
                         FT_Done_Face(face);
-                        return Err(());
+                        return Err(String::from("Failed to fetch face"));
                     }
                     faces.faces.push(face);
                 }
@@ -150,8 +150,8 @@ mod ffi {
     }
 }
 
-pub fn font_has_char(c: char, font_path: &Path) -> Result<bool, ()> {
-    let library = ffi::FTLibrary::new().ok_or(())?;
+pub fn font_has_char(c: char, font_path: &Path) -> Result<bool, String> {
+    let library = ffi::FTLibrary::new().ok_or(String::from("Failed to get FTLibrary"))?;
     let mut args = ffi::FTOpenArgs::new_with_path(font_path);
     let faces = ffi::FTFaces::new(&library, &mut args)?;
 

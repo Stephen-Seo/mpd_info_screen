@@ -740,6 +740,11 @@ impl EventHandler for MPDDisplay {
                                     &mut self.loaded_fonts,
                                     ctx,
                                 );
+                                log(
+                                    format!("loaded_fonts size is {}", self.loaded_fonts.len()),
+                                    debug_log::LogState::Debug,
+                                    self.opts.log_level,
+                                );
                             }
                         } else {
                             self.dirty_flag
