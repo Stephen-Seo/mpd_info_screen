@@ -7,9 +7,11 @@ mod unicode_support;
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::winit_event::{ElementState, KeyboardInput, ModifiersState};
 use ggez::event::{self, ControlFlow, EventHandler};
+use ggez::filesystem::mount;
 use ggez::graphics::{self, Rect};
 use ggez::{ContextBuilder, GameError};
 use std::net::Ipv4Addr;
+use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
 use structopt::StructOpt;
@@ -62,6 +64,9 @@ fn main() -> Result<(), String> {
         })
         .build()
         .expect("Failed to create ggez context");
+
+    // mount "/" read-only so that fonts can be loaded via absolute paths
+    mount(&mut ctx, &PathBuf::from("/"), true);
 
     let mut display = display::MPDDisplay::new(&mut ctx, opt.clone());
 
