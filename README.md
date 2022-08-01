@@ -16,7 +16,9 @@ counter, and the filename currently being played
 By default, unicode characters will not display properly. Build the project with
 the `unicode_support` feature enabled to enable fetching fonts from the local
 filesystem to display unicode characters properly (if the system is missing a
-font, then it will still be displayed incorrectly).
+font, then it will still be displayed incorrectly). Note that your system must
+have `fontconfig` and `freetype` installed (most Linux systems should have these
+installed already).
 
     cargo build --release --features unicode_support
 
