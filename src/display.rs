@@ -92,10 +92,18 @@ fn string_to_text(
                     loaded_fonts.push((path, font));
                     return Some(loaded_fonts.len() - 1);
                 } else {
-                    println!("Failed to load {:?}: {:?}", &path, new_font);
+                    log(
+                        format!("Failed to load {:?}: {:?}", &path, new_font),
+                        debug_log::LogState::Error,
+                        debug_log::LogLevel::Error,
+                    );
                 }
             } else {
-                println!("Failed to find font for {}", c);
+                log(
+                    format!("Failed to find font for {}", c),
+                    debug_log::LogState::Error,
+                    debug_log::LogLevel::Error,
+                );
             }
 
             None
