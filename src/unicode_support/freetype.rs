@@ -44,6 +44,8 @@ mod ffi {
 
     pub struct FTOpenArgs {
         args: FT_Open_Args,
+        // "args" has a pointer to the CString in "pathname", so it must be kept
+        #[allow(dead_code)]
         pathname: Option<CString>,
     }
 
@@ -55,13 +57,13 @@ mod ffi {
                 );
                 let args = FT_Open_Args {
                     flags: FT_OPEN_PATHNAME,
-                    memory_base: 0 as *const u8,
+                    memory_base: std::ptr::null::<u8>(),
                     memory_size: 0,
                     pathname: cstring.as_ptr() as *mut i8,
-                    stream: 0 as *mut FT_StreamRec_,
-                    driver: 0 as *mut FT_ModuleRec_,
+                    stream: std::ptr::null_mut::<FT_StreamRec_>(),
+                    driver: std::ptr::null_mut::<FT_ModuleRec_>(),
                     num_params: 0,
-                    params: 0 as *mut FT_Parameter_,
+                    params: std::ptr::null_mut::<FT_Parameter_>(),
                 };
 
                 FTOpenArgs {
@@ -71,6 +73,7 @@ mod ffi {
             }
         }
 
+        #[allow(dead_code)]
         pub fn get_args(&self) -> FT_Open_Args {
             self.args
         }
@@ -98,7 +101,6 @@ mod ffi {
         pub fn new(library: &FTLibrary, args: &mut FTOpenArgs) -> Result<FTFaces, ()> {
             let mut faces = FTFaces { faces: Vec::new() };
             unsafe {
-                let count;
                 let mut face: FT_Face = 0 as FT_Face;
                 // first get number of faces
                 let mut result = FT_Open_Face(
@@ -111,7 +113,7 @@ mod ffi {
                     FT_Done_Face(face);
                     return Err(());
                 }
-                count = (*face).num_faces;
+                let count = (*face).num_faces;
 
                 for i in 0..count {
                     result = FT_Open_Face(

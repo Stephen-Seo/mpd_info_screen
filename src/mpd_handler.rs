@@ -1,5 +1,6 @@
 use crate::debug_log::{log, LogLevel, LogState};
-use std::io::{self, Read, Write};
+use std::fmt::Write;
+use std::io::{self, Read, Write as IOWrite};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -44,6 +45,8 @@ pub struct MPDHandler {
     state: Arc<RwLock<MPDHandlerState>>,
 }
 
+type SelfThreadT = Option<Arc<Mutex<thread::JoinHandle<Result<(), String>>>>>;
+
 pub struct MPDHandlerState {
     art_data: Vec<u8>,
     art_data_size: usize,
@@ -70,7 +73,7 @@ pub struct MPDHandlerState {
     song_title_get_time: Instant,
     song_pos_get_time: Instant,
     song_length_get_time: Instant,
-    self_thread: Option<Arc<Mutex<thread::JoinHandle<Result<(), String>>>>>,
+    self_thread: SelfThreadT,
     dirty_flag: Arc<AtomicBool>,
     pub stop_flag: Arc<AtomicBool>,
     log_level: LogLevel,
@@ -320,6 +323,7 @@ impl MPDHandler {
         Err(())
     }
 
+    #[allow(dead_code)]
     pub fn is_dirty(&self) -> Result<bool, ()> {
         if let Ok(write_lock) = self.state.try_write() {
             return Ok(write_lock.dirty_flag.swap(false, Ordering::Relaxed));
@@ -328,6 +332,7 @@ impl MPDHandler {
         Err(())
     }
 
+    #[allow(dead_code)]
     pub fn force_get_current_song(&self) {
         loop {
             if let Ok(mut write_lock) = self.state.try_write() {
@@ -349,6 +354,7 @@ impl MPDHandler {
         Ok(!read_handle.can_authenticate)
     }
 
+    #[allow(dead_code)]
     pub fn has_image_data(&self) -> Result<bool, ()> {
         let read_handle = self.state.try_read().map_err(|_| ())?;
         Ok(read_handle.is_art_data_ready())
@@ -638,9 +644,7 @@ impl MPDHandler {
                             MPDPlayState::Paused
                         };
                         write_handle.error_text.clear();
-                        write_handle
-                            .error_text
-                            .push_str(&format!("MPD has {:?}", got_mpd_state));
+                        write!(&mut write_handle.error_text, "MPD has {:?}", got_mpd_state).ok();
                         log(
                             format!("MPD is {:?}", got_mpd_state),
                             LogState::Warning,

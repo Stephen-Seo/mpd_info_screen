@@ -51,10 +51,11 @@ fn seconds_to_time(seconds: f64) -> String {
 }
 
 #[cfg(not(feature = "unicode_support"))]
+#[allow(clippy::ptr_arg)]
 fn string_to_text(
     string: String,
-    loaded_fonts: &mut Vec<(PathBuf, Font)>,
-    ctx: &mut Context,
+    _loaded_fonts: &mut Vec<(PathBuf, Font)>,
+    _ctx: &mut Context,
 ) -> Text {
     Text::new(TextFragment::from(string))
 }
@@ -134,37 +135,35 @@ fn string_to_text(
                     current_fragment.font = Some(font);
                 }
                 current_fragment.text.push(c);
-            } else {
-                if let Some(idx) = idx_opt {
-                    let font = loaded_fonts[idx].1;
-                    if let Some(current_font) = current_fragment.font {
-                        if current_font == font {
-                            current_fragment.text.push(c);
-                        } else {
-                            if !current_fragment.text.is_empty() {
-                                text.add(current_fragment);
-                                current_fragment = Default::default();
-                            }
-                            current_fragment.text.push(c);
-                            current_fragment.font = Some(font);
-                        }
-                    } else if current_fragment.text.is_empty() {
+            } else if let Some(idx) = idx_opt {
+                let font = loaded_fonts[idx].1;
+                if let Some(current_font) = current_fragment.font {
+                    if current_font == font {
                         current_fragment.text.push(c);
-                        current_fragment.font = Some(font);
                     } else {
-                        text.add(current_fragment);
-                        current_fragment = Default::default();
-
+                        if !current_fragment.text.is_empty() {
+                            text.add(current_fragment);
+                            current_fragment = Default::default();
+                        }
                         current_fragment.text.push(c);
                         current_fragment.font = Some(font);
                     }
-                } else {
-                    if !current_fragment.text.is_empty() && current_fragment.font.is_some() {
-                        text.add(current_fragment);
-                        current_fragment = Default::default();
-                    }
+                } else if current_fragment.text.is_empty() {
                     current_fragment.text.push(c);
+                    current_fragment.font = Some(font);
+                } else {
+                    text.add(current_fragment);
+                    current_fragment = Default::default();
+
+                    current_fragment.text.push(c);
+                    current_fragment.font = Some(font);
                 }
+            } else {
+                if !current_fragment.text.is_empty() && current_fragment.font.is_some() {
+                    text.add(current_fragment);
+                    current_fragment = Default::default();
+                }
+                current_fragment.text.push(c);
             }
             prev_is_ascii = false;
         }

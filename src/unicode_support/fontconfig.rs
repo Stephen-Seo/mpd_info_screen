@@ -9,6 +9,7 @@ mod ffi {
         #![allow(non_snake_case)]
         #![allow(dead_code)]
         #![allow(deref_nullptr)]
+        #![allow(clippy::redundant_static_lifetimes)]
 
         include!(concat!(env!("OUT_DIR"), "/unicode_support_bindings.rs"));
     }
@@ -37,6 +38,7 @@ mod ffi {
             }
         }
 
+        #[allow(dead_code)]
         pub fn get(&mut self) -> *mut bindgen::FcConfig {
             self.config
         }
@@ -97,6 +99,7 @@ mod ffi {
     }
 
     impl FcCharSetWr {
+        #[allow(dead_code)]
         pub fn new_with_str(s: &str) -> Result<Self, String> {
             let charset;
             unsafe {
@@ -231,15 +234,14 @@ mod ffi {
                         i,
                         &mut value as *mut bindgen::FcValue,
                     ) == bindgen::_FcResult_FcResultMatch
+                        && value.type_ == bindgen::_FcType_FcTypeString
                     {
-                        if value.type_ == bindgen::_FcType_FcTypeString {
-                            let cs = CStr::from_ptr(value.u.s as *const i8);
-                            vec.push(
-                                cs.to_str()
-                                    .map_err(|_| String::from("Failed to convert CStr to String"))?
-                                    .to_owned(),
-                            );
-                        }
+                        let cs = CStr::from_ptr(value.u.s as *const i8);
+                        vec.push(
+                            cs.to_str()
+                                .map_err(|_| String::from("Failed to convert CStr to String"))?
+                                .to_owned(),
+                        );
                     }
                 }
             }
@@ -295,6 +297,7 @@ mod ffi {
     }
 }
 
+#[allow(dead_code)]
 pub fn get_matching_font_from_str(s: &str) -> Result<PathBuf, String> {
     let mut config = ffi::FcConfigWr::new()?;
     let mut charset = ffi::FcCharSetWr::new_with_str(s)?;
