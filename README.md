@@ -11,9 +11,17 @@ A Rust program that displays info about the currently running MPD server.
 The window shows albumart (may be embedded in the audio file, or is a "cover.jpg" in the same directory as the song file), a "time-remaining"
 counter, and the filename currently being played
 
+By default, unicode characters will not display properly. Build the project with
+the `unicode_support` feature enabled to enable fetching fonts from the local
+filesystem to display unicode characters properly (if the system is missing a
+font, then it will still be displayed incorrectly).
+
+    cargo build --release --features unicode_support
+
 # Usage
 
-    mpd_info_screen 0.2.20
+
+    mpd_info_screen 0.3.0
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
@@ -42,7 +50,7 @@ Also note that pressing the H key while displaying text will hide the text.
 
 # Issues / TODO
 
-- [ ] UTF-8 Non-ascii font support  
+- [x] UTF-8 Non-ascii font support (Use the `unicode_support` feature to enable; only tested in linux)
 - [x] Support for album art not embedded but in the same directory
 
 ## MPD Version
@@ -64,3 +72,12 @@ MIT license.
 
 Uses dependency [structopt](https://crates.io/crates/structopt) which is
 licensed under Apache-2.0 or MIT licenses.
+
+## Unicode Support Dependencies
+
+Uses dependency
+[fontconfig](https://www.freedesktop.org/wiki/Software/fontconfig/) which is
+[licensed with this license](https://www.freedesktop.org/software/fontconfig/fontconfig-devel/ln12.html).
+
+Uses dependency [freetype](https://freetype.org) which is
+[licensed with this license](https://freetype.org/license.html).

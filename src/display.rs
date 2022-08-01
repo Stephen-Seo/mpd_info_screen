@@ -9,6 +9,7 @@ use ggez::graphics::{
 use ggez::{timer, Context, GameError, GameResult};
 use image::io::Reader as ImageReader;
 use std::io::Cursor;
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::{atomic::Ordering, Arc, RwLockReadGuard};
 use std::thread;
@@ -49,6 +50,125 @@ fn seconds_to_time(seconds: f64) -> String {
     result
 }
 
+#[cfg(not(feature = "unicode_support"))]
+fn string_to_text(
+    string: String,
+    loaded_fonts: &mut Vec<(PathBuf, Font)>,
+    ctx: &mut Context,
+) -> Text {
+    Text::new(TextFragment::from(string))
+}
+
+#[cfg(feature = "unicode_support")]
+fn string_to_text(
+    string: String,
+    loaded_fonts: &mut Vec<(PathBuf, Font)>,
+    ctx: &mut Context,
+) -> Text {
+    use super::unicode_support;
+
+    let mut text = Text::default();
+    let mut current_fragment = TextFragment::default();
+
+    if string.is_ascii() {
+        current_fragment.text = string;
+        text.add(current_fragment);
+        return text;
+    }
+
+    let find_font =
+        |c: char, loaded_fonts: &mut Vec<(PathBuf, Font)>, ctx: &mut Context| -> Option<usize> {
+            for (idx, (path, _)) in loaded_fonts.iter().enumerate() {
+                let result = unicode_support::font_has_char(c, path);
+                if result.is_ok() && result.unwrap() {
+                    return Some(idx);
+                }
+            }
+
+            let find_result = unicode_support::get_matching_font_from_char(c);
+            if let Ok(path) = find_result {
+                let new_font = Font::new(ctx, &path);
+                if let Ok(font) = new_font {
+                    loaded_fonts.push((path, font));
+                    return Some(loaded_fonts.len() - 1);
+                } else {
+                    println!("Failed to load {:?}: {:?}", &path, new_font);
+                }
+            } else {
+                println!("Failed to find font for {}", c);
+            }
+
+            None
+        };
+
+    let mut prev_is_ascii = true;
+    for c in string.chars() {
+        if c.is_ascii() {
+            if prev_is_ascii {
+                current_fragment.text.push(c);
+            } else {
+                if !current_fragment.text.is_empty() {
+                    text.add(current_fragment);
+                    current_fragment = Default::default();
+                }
+                current_fragment.text.push(c);
+            }
+            prev_is_ascii = true;
+        } else {
+            let idx_opt = find_font(c, loaded_fonts, ctx);
+            if prev_is_ascii {
+                if let Some(idx) = idx_opt {
+                    if !current_fragment.text.is_empty() {
+                        text.add(current_fragment);
+                        current_fragment = Default::default();
+                    }
+                    let (_, font) = loaded_fonts[idx];
+                    current_fragment.font = Some(font);
+                }
+                current_fragment.text.push(c);
+            } else {
+                if let Some(idx) = idx_opt {
+                    let font = loaded_fonts[idx].1;
+                    if let Some(current_font) = current_fragment.font {
+                        if current_font == font {
+                            current_fragment.text.push(c);
+                        } else {
+                            if !current_fragment.text.is_empty() {
+                                text.add(current_fragment);
+                                current_fragment = Default::default();
+                            }
+                            current_fragment.text.push(c);
+                            current_fragment.font = Some(font);
+                        }
+                    } else if current_fragment.text.is_empty() {
+                        current_fragment.text.push(c);
+                        current_fragment.font = Some(font);
+                    } else {
+                        text.add(current_fragment);
+                        current_fragment = Default::default();
+
+                        current_fragment.text.push(c);
+                        current_fragment.font = Some(font);
+                    }
+                } else {
+                    if !current_fragment.text.is_empty() && current_fragment.font.is_some() {
+                        text.add(current_fragment);
+                        current_fragment = Default::default();
+                    }
+                    current_fragment.text.push(c);
+                }
+            }
+            prev_is_ascii = false;
+        }
+    }
+
+    if !current_fragment.text.is_empty() {
+        text.add(current_fragment);
+    }
+
+    text
+}
+
 pub struct MPDDisplay {
     opts: Opt,
     mpd_handler: Result<MPDHandler, String>,
@@ -63,10 +183,13 @@ pub struct MPDDisplay {
     album_art: Option<Image>,
     album_art_draw_transform: Option<Transform>,
     filename_text: Text,
+    filename_string_cache: String,
     filename_transform: Transform,
     artist_text: Text,
+    artist_string_cache: String,
     artist_transform: Transform,
     title_text: Text,
+    title_string_cache: String,
     title_transform: Transform,
     timer_text: Text,
     timer_transform: Transform,
@@ -78,6 +201,7 @@ pub struct MPDDisplay {
     hide_text: bool,
     tried_album_art_in_dir: bool,
     mpd_play_state: MPDPlayState,
+    loaded_fonts: Vec<(PathBuf, Font)>,
 }
 
 impl MPDDisplay {
@@ -111,6 +235,10 @@ impl MPDDisplay {
             hide_text: false,
             tried_album_art_in_dir: false,
             mpd_play_state: MPDPlayState::Playing,
+            loaded_fonts: Vec::new(),
+            filename_string_cache: String::new(),
+            artist_string_cache: String::new(),
+            title_string_cache: String::new(),
         }
     }
 
@@ -314,13 +442,12 @@ impl MPDDisplay {
                     break;
                 }
 
-                text.set_font(
-                    Font::default(),
-                    PxScale {
+                for fragment in text.fragments_mut() {
+                    fragment.scale = Some(PxScale {
                         x: current_x,
                         y: current_y,
-                    },
-                );
+                    });
+                }
                 width = text.width(ctx);
                 height = text.height(ctx);
 
@@ -346,13 +473,12 @@ impl MPDDisplay {
                 } else {
                     let diff_scale_y = current_y / height * timer_height;
                     let current_x = current_x * diff_scale_y / current_y;
-                    text.set_font(
-                        Font::default(),
-                        PxScale {
+                    for fragment in text.fragments_mut() {
+                        fragment.scale = Some(PxScale {
                             x: current_x,
                             y: diff_scale_y,
-                        },
-                    );
+                        });
+                    }
                     *timer_x = current_x;
                     *timer_y = diff_scale_y;
                     // width = text.width(ctx); // not really used after this
@@ -600,7 +726,14 @@ impl EventHandler for MPDDisplay {
                     } else {
                         self.mpd_play_state = MPDPlayState::Playing;
                         if !shared.title.is_empty() {
-                            self.title_text = Text::new(shared.title.clone());
+                            if shared.title != self.title_string_cache {
+                                self.title_string_cache = shared.title.clone();
+                                self.title_text = string_to_text(
+                                    shared.title.clone(),
+                                    &mut self.loaded_fonts,
+                                    ctx,
+                                );
+                            }
                         } else {
                             self.dirty_flag
                                 .as_ref()
@@ -608,7 +741,14 @@ impl EventHandler for MPDDisplay {
                                 .store(true, Ordering::Relaxed);
                         }
                         if !shared.artist.is_empty() {
-                            self.artist_text = Text::new(shared.artist.clone());
+                            if shared.artist != self.artist_string_cache {
+                                self.artist_string_cache = shared.artist.clone();
+                                self.artist_text = string_to_text(
+                                    shared.artist.clone(),
+                                    &mut self.loaded_fonts,
+                                    ctx,
+                                );
+                            }
                         } else {
                             self.dirty_flag
                                 .as_ref()
@@ -616,11 +756,18 @@ impl EventHandler for MPDDisplay {
                                 .store(true, Ordering::Relaxed);
                         }
                         if !shared.filename.is_empty() {
-                            if self.filename_text.contents() != shared.filename {
-                                self.album_art = None;
-                                self.tried_album_art_in_dir = false;
+                            if shared.filename != self.filename_string_cache {
+                                self.filename_string_cache = shared.filename.clone();
+                                if self.filename_text.contents() != shared.filename {
+                                    self.album_art = None;
+                                    self.tried_album_art_in_dir = false;
+                                }
+                                self.filename_text = string_to_text(
+                                    shared.filename.clone(),
+                                    &mut self.loaded_fonts,
+                                    ctx,
+                                );
                             }
-                            self.filename_text = Text::new(shared.filename.clone());
                         } else {
                             self.dirty_flag
                                 .as_ref()

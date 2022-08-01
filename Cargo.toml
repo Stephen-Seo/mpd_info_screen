@@ -1,6 +1,6 @@
 [package]
 name = "mpd_info_screen"
-version = "0.2.20"
+version = "0.3.0"
 edition = "2018"
 description = "Displays info on currently playing music from an MPD daemon"
 license = "MIT"
@@ -12,3 +12,10 @@ repository = "https://github.com/Stephen-Seo/mpd_info_screen"
 structopt = "0.3"
 image = "0.24"
 ggez = "0.7"
+freetype = { version = "0.7", optional = true }
+
+[build-dependencies]
+bindgen = { version = "0.53", optional = true }
+
+[features]
+unicode_support = ["dep:freetype", "dep:bindgen"]
