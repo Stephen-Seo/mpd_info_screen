@@ -2,7 +2,7 @@ use std::path::Path;
 
 mod ffi {
     use freetype::freetype::{
-        FT_Done_Face, FT_Done_Library, FT_Face, FT_FaceRec_, FT_Get_Char_Index, FT_Init_FreeType,
+        FT_Done_Face, FT_Done_FreeType, FT_Face, FT_FaceRec_, FT_Get_Char_Index, FT_Init_FreeType,
         FT_Library, FT_ModuleRec_, FT_Open_Args, FT_Open_Face, FT_Parameter_, FT_StreamRec_,
         FT_OPEN_PATHNAME,
     };
@@ -17,7 +17,7 @@ mod ffi {
         fn drop(&mut self) {
             if !self.library.is_null() {
                 unsafe {
-                    FT_Done_Library(self.library);
+                    FT_Done_FreeType(self.library);
                 }
             }
         }
@@ -151,7 +151,7 @@ mod ffi {
 }
 
 pub fn font_has_char(c: char, font_path: &Path) -> Result<bool, String> {
-    let library = ffi::FTLibrary::new().ok_or(String::from("Failed to get FTLibrary"))?;
+    let library = ffi::FTLibrary::new().ok_or_else(|| String::from("Failed to get FTLibrary"))?;
     let mut args = ffi::FTOpenArgs::new_with_path(font_path);
     let faces = ffi::FTFaces::new(&library, &mut args)?;
 
