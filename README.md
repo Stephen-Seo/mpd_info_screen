@@ -31,6 +31,7 @@ installed already).
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
     
     FLAGS:
+            --disable-show-album       disable album display
             --disable-show-artist      disable artist display
             --disable-show-filename    disable filename display
             --disable-show-title       disable title display
