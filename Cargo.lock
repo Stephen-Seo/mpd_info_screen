@@ -1668,7 +1668,7 @@ dependencies = [
 
 [[package]]
 name = "mpd_info_screen"
-version = "0.3.3"
+version = "0.3.4"
 dependencies = [
  "bindgen",
  "freetype",
