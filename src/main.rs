@@ -30,6 +30,8 @@ pub struct Opt {
     disable_show_title: bool,
     #[structopt(long = "disable-show-artist", help = "disable artist display")]
     disable_show_artist: bool,
+    #[structopt(long = "disable-show-album", help = "disable album display")]
+    disable_show_album: bool,
     #[structopt(long = "disable-show-filename", help = "disable filename display")]
     disable_show_filename: bool,
     #[structopt(long = "pprompt", help = "input password via prompt")]

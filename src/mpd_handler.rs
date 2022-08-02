@@ -34,6 +34,7 @@ pub struct InfoFromShared {
     pub filename: String,
     pub title: String,
     pub artist: String,
+    pub album: String,
     pub length: f64,
     pub pos: f64,
     pub error_text: String,
@@ -54,6 +55,7 @@ pub struct MPDHandlerState {
     current_song_filename: String,
     current_song_title: String,
     current_song_artist: String,
+    current_song_album: String,
     current_song_length: f64,
     current_song_position: f64,
     current_binary_size: usize,
@@ -280,6 +282,7 @@ impl MPDHandler {
                 stop_flag: Arc::new(AtomicBool::new(false)),
                 log_level,
                 mpd_play_state: MPDPlayState::Stopped,
+                current_song_album: String::new(),
             })),
         };
 
@@ -304,6 +307,7 @@ impl MPDHandler {
                 filename: read_lock.current_song_filename.clone(),
                 title: read_lock.current_song_title.clone(),
                 artist: read_lock.current_song_artist.clone(),
+                album: read_lock.current_song_album.clone(),
                 length: read_lock.current_song_length,
                 pos: read_lock.current_song_position
                     + read_lock.song_pos_get_time.elapsed().as_secs_f64(),
@@ -632,6 +636,7 @@ impl MPDHandler {
                         write_handle.can_get_album_art_in_dir = true;
                         write_handle.current_song_title.clear();
                         write_handle.current_song_artist.clear();
+                        write_handle.current_song_album.clear();
                         write_handle.current_song_length = 0.0;
                         write_handle.current_song_position = 0.0;
                         write_handle.did_check_overtime = false;
@@ -663,6 +668,7 @@ impl MPDHandler {
                         write_handle.can_get_album_art_in_dir = true;
                         write_handle.current_song_title.clear();
                         write_handle.current_song_artist.clear();
+                        write_handle.current_song_album.clear();
                         write_handle.current_song_length = 0.0;
                         write_handle.current_song_position = 0.0;
                         write_handle.did_check_overtime = false;
@@ -724,6 +730,8 @@ impl MPDHandler {
                     write_handle.current_song_title = line.split_off(7);
                 } else if line.starts_with("Artist: ") {
                     write_handle.current_song_artist = line.split_off(8);
+                } else if line.starts_with("Album: ") {
+                    write_handle.current_song_album = line.split_off(7);
                 } else if line.starts_with("type: ") {
                     write_handle.art_data_type = line.split_off(6);
                 } else {

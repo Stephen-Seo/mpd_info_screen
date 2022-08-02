@@ -22,6 +22,7 @@ const TEXT_X_OFFSET: f32 = 0.3;
 const TEXT_OFFSET_Y_SPACING: f32 = 0.4;
 const TEXT_HEIGHT_SCALE: f32 = 0.1;
 const ARTIST_HEIGHT_SCALE: f32 = 0.08;
+const ALBUM_HEIGHT_SCALE: f32 = 0.08;
 const TIMER_HEIGHT_SCALE: f32 = 0.07;
 const MIN_WIDTH_RATIO: f32 = 4.0 / 5.0;
 const INCREASE_AMT: f32 = 6.0 / 5.0;
@@ -198,6 +199,9 @@ pub struct MPDDisplay {
     title_text: Text,
     title_string_cache: String,
     title_transform: Transform,
+    album_text: Text,
+    album_string_cache: String,
+    album_transform: Transform,
     timer_text: Text,
     timer_transform: Transform,
     timer_x: f32,
@@ -219,18 +223,18 @@ impl MPDDisplay {
             is_valid: true,
             is_initialized: false,
             is_authenticated: false,
-            notice_text: Text::new(""),
+            notice_text: Text::default(),
             poll_instant: Instant::now() - POLL_TIME,
             shared: None,
             password_entered: false,
             dirty_flag: None,
             album_art: None,
             album_art_draw_transform: None,
-            filename_text: Text::new(""),
+            filename_text: Text::default(),
             filename_transform: Transform::default(),
-            artist_text: Text::new(""),
+            artist_text: Text::default(),
             artist_transform: Transform::default(),
-            title_text: Text::new(""),
+            title_text: Text::default(),
             title_transform: Transform::default(),
             timer_text: Text::new("0"),
             timer_transform: Transform::default(),
@@ -246,6 +250,9 @@ impl MPDDisplay {
             filename_string_cache: String::new(),
             artist_string_cache: String::new(),
             title_string_cache: String::new(),
+            album_text: Text::default(),
+            album_string_cache: String::new(),
+            album_transform: Transform::default(),
         }
     }
 
@@ -420,12 +427,14 @@ impl MPDDisplay {
         let screen_coords: Rect = graphics::screen_coordinates(ctx);
 
         let text_height_limit = TEXT_HEIGHT_SCALE * screen_coords.h.abs();
+        let album_height_limit = ALBUM_HEIGHT_SCALE * screen_coords.h.abs();
         let artist_height_limit = ARTIST_HEIGHT_SCALE * screen_coords.h.abs();
         let timer_height = TIMER_HEIGHT_SCALE * screen_coords.h.abs();
 
         let mut offset_y: f32 = screen_coords.h;
 
         let mut filename_y: f32 = 0.0;
+        let mut album_y: f32 = 0.0;
         let mut artist_y: f32 = 0.0;
         let mut title_y: f32 = 0.0;
         let mut timer_y: f32 = 0.0;
@@ -436,6 +445,7 @@ impl MPDDisplay {
                              y: &mut f32,
                              is_string: bool,
                              is_artist: bool,
+                             is_album: bool,
                              timer_x: &mut f32,
                              timer_y: &mut f32| {
             let mut current_x = INIT_FONT_SIZE_X;
@@ -463,6 +473,8 @@ impl MPDDisplay {
                         || height
                             >= (if is_artist {
                                 artist_height_limit
+                            } else if is_album {
+                                album_height_limit
                             } else {
                                 text_height_limit
                             })
@@ -513,6 +525,7 @@ impl MPDDisplay {
                 &mut filename_y,
                 true,
                 false,
+                false,
                 &mut self.timer_x,
                 &mut self.timer_y,
             );
@@ -524,6 +537,20 @@ impl MPDDisplay {
             );
         }
 
+        if !self.album_text.contents().is_empty() && !self.opts.disable_show_album {
+            set_transform(
+                &mut self.album_text,
+                &mut self.album_transform,
+                &mut offset_y,
+                &mut album_y,
+                true,
+                false,
+                true,
+                &mut self.timer_x,
+                &mut self.timer_y,
+            );
+        }
+
         if !self.artist_text.contents().is_empty() && !self.opts.disable_show_artist {
             set_transform(
                 &mut self.artist_text,
@@ -532,6 +559,7 @@ impl MPDDisplay {
                 &mut artist_y,
                 true,
                 true,
+                false,
                 &mut self.timer_x,
                 &mut self.timer_y,
             );
@@ -551,6 +579,7 @@ impl MPDDisplay {
                 &mut title_y,
                 true,
                 false,
+                false,
                 &mut self.timer_x,
                 &mut self.timer_y,
             );
@@ -569,11 +598,13 @@ impl MPDDisplay {
             &mut timer_y,
             false,
             false,
+            false,
             &mut self.timer_x,
             &mut self.timer_y,
         );
 
         let filename_dimensions = self.filename_text.dimensions(ctx);
+        let album_dimensions = self.album_text.dimensions(ctx);
         let artist_dimensions = self.artist_text.dimensions(ctx);
         let title_dimensions = self.title_text.dimensions(ctx);
         let timer_dimensions = self.timer_text.dimensions(ctx);
@@ -587,6 +618,18 @@ impl MPDDisplay {
                     y: filename_y,
                     w: filename_dimensions.w,
                     h: filename_dimensions.h,
+                },
+                Color::from_rgba(0, 0, 0, 160),
+            )?;
+        }
+        if !self.opts.disable_show_album {
+            mesh_builder.rectangle(
+                DrawMode::fill(),
+                Rect {
+                    x: TEXT_X_OFFSET,
+                    y: album_y,
+                    w: album_dimensions.w,
+                    h: album_dimensions.h,
                 },
                 Color::from_rgba(0, 0, 0, 160),
             )?;
@@ -722,9 +765,10 @@ impl EventHandler for MPDDisplay {
                     }
                     if shared.mpd_play_state != MPDPlayState::Playing {
                         if shared.mpd_play_state == MPDPlayState::Stopped {
-                            self.title_text = Text::new("");
-                            self.artist_text = Text::new("");
-                            self.filename_text = Text::new("");
+                            self.title_text = Text::default();
+                            self.artist_text = Text::default();
+                            self.album_text = Text::default();
+                            self.filename_text = Text::default();
                             self.timer = 0.0;
                             self.length = 0.0;
                             self.album_art = None;
@@ -757,6 +801,21 @@ impl EventHandler for MPDDisplay {
                                 self.artist_string_cache = shared.artist.clone();
                                 self.artist_text = string_to_text(
                                     shared.artist.clone(),
+                                    &mut self.loaded_fonts,
+                                    ctx,
+                                );
+                            }
+                        } else {
+                            self.dirty_flag
+                                .as_ref()
+                                .unwrap()
+                                .store(true, Ordering::Relaxed);
+                        }
+                        if !shared.album.is_empty() {
+                            if shared.album != self.album_string_cache {
+                                self.album_string_cache = shared.album.clone();
+                                self.album_text = string_to_text(
+                                    shared.album.clone(),
                                     &mut self.loaded_fonts,
                                     ctx,
                                 );
@@ -855,6 +914,16 @@ impl EventHandler for MPDDisplay {
                         ctx,
                         DrawParam {
                             trans: self.filename_transform,
+                            ..Default::default()
+                        },
+                    )?;
+                }
+
+                if !self.opts.disable_show_album {
+                    self.album_text.draw(
+                        ctx,
+                        DrawParam {
+                            trans: self.album_transform,
                             ..Default::default()
                         },
                     )?;
