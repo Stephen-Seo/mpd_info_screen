@@ -25,7 +25,7 @@ installed already).
 # Usage
 
 
-    mpd_info_screen 0.3.5
+    mpd_info_screen 0.3.6
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
@@ -41,8 +41,9 @@ installed already).
         -V, --version                  Prints version information
     
     OPTIONS:
-        -l, --log-level <log-level>     [default: Error]  [possible values: Error, Warning, Debug, Verbose]
+        -l, --log-level <log-level>                 [default: Error]  [possible values: Error, Warning, Debug, Verbose]
         -p <password>
+        -t, --text-bg-opacity <text-bg-opacity>    sets the opacity of the text background (0-255) [default: 190]
     
     ARGS:
         <host>
