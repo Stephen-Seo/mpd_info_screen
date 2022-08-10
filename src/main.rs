@@ -49,6 +49,13 @@ pub struct Opt {
         case_insensitive = true,
     )]
     log_level: debug_log::LogLevel,
+    #[structopt(
+        short,
+        long,
+        help = "sets the opacity of the text background (0-255)",
+        default_value = "190"
+    )]
+    text_bg_opacity: u8,
 }
 
 fn main() -> Result<(), String> {

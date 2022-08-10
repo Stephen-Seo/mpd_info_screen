@@ -619,7 +619,7 @@ impl MPDDisplay {
                     w: filename_dimensions.w,
                     h: filename_dimensions.h,
                 },
-                Color::from_rgba(0, 0, 0, 160),
+                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?;
         }
         if !self.opts.disable_show_album {
@@ -631,7 +631,7 @@ impl MPDDisplay {
                     w: album_dimensions.w,
                     h: album_dimensions.h,
                 },
-                Color::from_rgba(0, 0, 0, 160),
+                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?;
         }
         if !self.opts.disable_show_artist {
@@ -643,7 +643,7 @@ impl MPDDisplay {
                     w: artist_dimensions.w,
                     h: artist_dimensions.h,
                 },
-                Color::from_rgba(0, 0, 0, 160),
+                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?;
         }
         if !self.opts.disable_show_title {
@@ -655,7 +655,7 @@ impl MPDDisplay {
                     w: title_dimensions.w,
                     h: title_dimensions.h,
                 },
-                Color::from_rgba(0, 0, 0, 160),
+                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?;
         }
         let mesh: Mesh = mesh_builder
@@ -667,7 +667,7 @@ impl MPDDisplay {
                     w: timer_dimensions.w,
                     h: timer_dimensions.h,
                 },
-                Color::from_rgba(0, 0, 0, 160),
+                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?
             .build(ctx)?;
 
