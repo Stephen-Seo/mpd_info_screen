@@ -397,9 +397,22 @@ impl MPDDisplay {
             );
         }
 
-        let img_result = ImageReader::with_format(Cursor::new(&image_ref), image_format)
-            .decode()
-            .map_err(|e| format!("Error: Failed to decode album art image: {}", e));
+        let img_result = if is_unknown_format {
+            let mut reader = ImageReader::new(Cursor::new(&image_ref));
+            reader = reader
+                .with_guessed_format()
+                .map_err(|e| format!("Error: Failed to guess format of album art image: {}", e))?;
+            reader.decode().map_err(|e| {
+                format!(
+                    "Error: Failed to decode album art image (guessed format): {}",
+                    e
+                )
+            })
+        } else {
+            ImageReader::with_format(Cursor::new(&image_ref), image_format)
+                .decode()
+                .map_err(|e| format!("Error: Failed to decode album art image: {}", e))
+        };
         if img_result.is_err() && !self.tried_album_art_in_dir {
             return try_second_art_fetch_method(
                 &mut self.tried_album_art_in_dir,
