@@ -26,7 +26,7 @@ installed already).
 # Usage
 
 
-    mpd_info_screen 0.3.6
+    mpd_info_screen 0.3.7
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
