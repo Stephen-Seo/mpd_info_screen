@@ -1,7 +1,7 @@
 use std::fmt::Display;
 use structopt::clap::arg_enum;
 
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LogState {
     Error,
     Warning,
@@ -10,7 +10,7 @@ pub enum LogState {
 }
 
 arg_enum! {
-    #[derive(Copy, Clone, Debug, PartialEq)]
+    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
     pub enum LogLevel {
         Error,
         Warning,
