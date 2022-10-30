@@ -8,6 +8,7 @@ use ggez::graphics::{
 };
 use ggez::{timer, Context, GameError, GameResult};
 use image::io::Reader as ImageReader;
+use image::DynamicImage;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
@@ -398,18 +399,24 @@ impl MPDDisplay {
         }
 
         let img_result = if is_unknown_format {
-            let mut reader = ImageReader::new(Cursor::new(&image_ref));
-            reader = reader
+            let reader = ImageReader::new(Cursor::new(image_ref));
+            let guessed_reader = reader
                 .with_guessed_format()
-                .map_err(|e| format!("Error: Failed to guess format of album art image: {}", e))?;
-            reader.decode().map_err(|e| {
-                format!(
-                    "Error: Failed to decode album art image (guessed format): {}",
-                    e
-                )
-            })
+                .map_err(|e| format!("Error: Failed to guess format of album art image: {}", e));
+            if let Ok(reader) = guessed_reader {
+                reader.decode().map_err(|e| {
+                    format!(
+                        "Error: Failed to decode album art image (guessed format): {}",
+                        e
+                    )
+                })
+            } else {
+                // Convert Ok(_) to Ok(DynamicImage) which will never be used since the if statement
+                // covers it.
+                guessed_reader.map(|_| DynamicImage::default())
+            }
         } else {
-            ImageReader::with_format(Cursor::new(&image_ref), image_format)
+            ImageReader::with_format(Cursor::new(image_ref), image_format)
                 .decode()
                 .map_err(|e| format!("Error: Failed to decode album art image: {}", e))
         };
