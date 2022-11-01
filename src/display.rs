@@ -411,9 +411,9 @@ impl MPDDisplay {
                     )
                 })
             } else {
-                // Convert Ok(_) to Ok(DynamicImage) which will never be used since the if statement
-                // covers it.
-                guessed_reader.map(|_| DynamicImage::default())
+                // Convert Ok(_) to Ok(DynamicImage) which will never be used
+                // since the if statement covers it.
+                guessed_reader.map(|_| -> DynamicImage { unreachable!() })
             }
         } else {
             ImageReader::with_format(Cursor::new(image_ref), image_format)
