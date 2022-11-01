@@ -23,6 +23,10 @@ installed already).
 
     cargo build --release --features unicode_support
 
+or through crates.io:
+
+    cargo install --features unicode_support mpd_info_screen
+
 # Usage
 
 
