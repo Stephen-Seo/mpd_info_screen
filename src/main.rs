@@ -123,9 +123,6 @@ fn main() -> Result<(), String> {
                     }
                 }
                 event::winit_event::WindowEvent::Resized(phys_size) => {
-                    ctx.gfx
-                        .set_drawable_size(phys_size.width as f32, phys_size.height as f32)
-                        .ok();
                     display
                         .resize_event(ctx, phys_size.width as f32, phys_size.height as f32)
                         .ok();
