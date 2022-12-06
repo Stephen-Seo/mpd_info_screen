@@ -7,8 +7,7 @@ mod unicode_support;
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::winit_event::{ElementState, KeyboardInput, ModifiersState};
 use ggez::event::{self, ControlFlow, EventHandler};
-use ggez::filesystem::mount;
-use ggez::graphics::{self, Rect};
+use ggez::input::keyboard::{self, KeyInput};
 use ggez::{ContextBuilder, GameError};
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
@@ -75,7 +74,7 @@ fn main() -> Result<(), String> {
         .expect("Failed to create ggez context");
 
     // mount "/" read-only so that fonts can be loaded via absolute paths
-    mount(&mut ctx, &PathBuf::from("/"), true);
+    ctx.fs.mount(&PathBuf::from("/"), true);
 
     let mut display = display::MPDDisplay::new(&mut ctx, opt.clone());
 
@@ -94,7 +93,7 @@ fn main() -> Result<(), String> {
         event::process_event(ctx, &mut event);
         match event {
             event::winit_event::Event::WindowEvent { event, .. } => match event {
-                event::winit_event::WindowEvent::CloseRequested => event::quit(ctx),
+                event::winit_event::WindowEvent::CloseRequested => ctx.request_quit(),
                 event::winit_event::WindowEvent::ModifiersChanged(state) => {
                     modifiers_state = state;
                 }
@@ -108,31 +107,31 @@ fn main() -> Result<(), String> {
                         },
                     is_synthetic: _,
                 } => {
-                    if keycode == event::KeyCode::Escape {
+                    if keycode == keyboard::KeyCode::Escape {
                         *control_flow = ControlFlow::Exit;
                         return;
                     }
+                    let ki = KeyInput {
+                        scancode: 0,
+                        keycode: Some(keycode),
+                        mods: From::from(modifiers_state),
+                    };
                     if state == ElementState::Pressed {
-                        display.key_down_event(ctx, keycode, modifiers_state.into(), false);
+                        display.key_down_event(ctx, ki, false).ok();
                     } else {
-                        display.key_up_event(ctx, keycode, modifiers_state.into());
+                        display.key_up_event(ctx, ki).ok();
                     }
                 }
                 event::winit_event::WindowEvent::Resized(phys_size) => {
-                    graphics::set_screen_coordinates(
-                        ctx,
-                        Rect {
-                            x: 0.0,
-                            y: 0.0,
-                            w: phys_size.width as f32,
-                            h: phys_size.height as f32,
-                        },
-                    )
-                    .expect("Failed to handle resizing window");
-                    display.resize_event(ctx, phys_size.width as f32, phys_size.height as f32);
+                    ctx.gfx
+                        .set_drawable_size(phys_size.width as f32, phys_size.height as f32)
+                        .ok();
+                    display
+                        .resize_event(ctx, phys_size.width as f32, phys_size.height as f32)
+                        .ok();
                 }
                 event::winit_event::WindowEvent::ReceivedCharacter(ch) => {
-                    display.text_input_event(ctx, ch);
+                    display.text_input_event(ctx, ch).ok();
                 }
                 x => log(
                     format!("Other window event fired: {:?}", x),
@@ -141,7 +140,7 @@ fn main() -> Result<(), String> {
                 ),
             },
             event::winit_event::Event::MainEventsCleared => {
-                ctx.timer_context.tick();
+                ctx.time.tick();
 
                 let mut game_result: Result<(), GameError> = display.update(ctx);
                 if game_result.is_err() {
@@ -149,14 +148,17 @@ fn main() -> Result<(), String> {
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
+
+                ctx.gfx.begin_frame().unwrap();
                 game_result = display.draw(ctx);
                 if game_result.is_err() {
                     println!("Error draw: {}", game_result.unwrap_err());
                     *control_flow = ControlFlow::Exit;
                     return;
                 }
+                ctx.gfx.end_frame().unwrap();
 
-                ctx.mouse_context.reset_delta();
+                ctx.mouse.reset_delta();
 
                 // sleep to force ~5 fps
                 thread::sleep(Duration::from_millis(200));

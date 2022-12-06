@@ -1,12 +1,14 @@
 use crate::debug_log::{self, log};
 use crate::mpd_handler::{InfoFromShared, MPDHandler, MPDHandlerState, MPDPlayState};
 use crate::Opt;
-use ggez::event::{self, EventHandler};
+use ggez::event::EventHandler;
 use ggez::graphics::{
-    self, Color, DrawMode, DrawParam, Drawable, Font, Image, Mesh, MeshBuilder, PxScale, Rect,
+    self, Color, DrawMode, DrawParam, Drawable, FontData, Image, Mesh, MeshBuilder, PxScale, Rect,
     Text, TextFragment, Transform,
 };
-use ggez::{timer, Context, GameError, GameResult};
+use ggez::input::keyboard::{self, KeyInput};
+use ggez::mint::Vector2;
+use ggez::{Context, GameError, GameResult};
 use image::io::Reader as ImageReader;
 use image::DynamicImage;
 use std::io::Cursor;
@@ -56,7 +58,7 @@ fn seconds_to_time(seconds: f64) -> String {
 #[allow(clippy::ptr_arg)]
 fn string_to_text(
     string: String,
-    _loaded_fonts: &mut Vec<(PathBuf, Font)>,
+    _loaded_fonts: &mut Vec<(PathBuf, String)>,
     _ctx: &mut Context,
 ) -> Text {
     Text::new(TextFragment::from(string))
@@ -65,7 +67,7 @@ fn string_to_text(
 #[cfg(feature = "unicode_support")]
 fn string_to_text(
     string: String,
-    loaded_fonts: &mut Vec<(PathBuf, Font)>,
+    loaded_fonts: &mut Vec<(PathBuf, String)>,
     ctx: &mut Context,
 ) -> Text {
     use super::unicode_support;
@@ -80,7 +82,7 @@ fn string_to_text(
     }
 
     let find_font =
-        |c: char, loaded_fonts: &mut Vec<(PathBuf, Font)>, ctx: &mut Context| -> Option<usize> {
+        |c: char, loaded_fonts: &mut Vec<(PathBuf, String)>, ctx: &mut Context| -> Option<usize> {
             for (idx, (path, _)) in loaded_fonts.iter().enumerate() {
                 let result = unicode_support::font_has_char(c, path);
                 if result.is_ok() && result.unwrap() {
@@ -90,9 +92,16 @@ fn string_to_text(
 
             let find_result = unicode_support::get_matching_font_from_char(c);
             if let Ok(path) = find_result {
-                let new_font = Font::new(ctx, &path);
+                let new_font = FontData::from_path(ctx, &path);
                 if let Ok(font) = new_font {
-                    loaded_fonts.push((path, font));
+                    let font_name: String = path
+                        .file_name()
+                        .expect("Should be valid filename at end of Font path.")
+                        .to_str()
+                        .expect("Font filename should be valid unicode.")
+                        .to_owned();
+                    ctx.gfx.add_font(&font_name, font);
+                    loaded_fonts.push((path, font_name));
                     return Some(loaded_fonts.len() - 1);
                 } else {
                     log(
@@ -133,13 +142,13 @@ fn string_to_text(
                         text.add(current_fragment);
                         current_fragment = Default::default();
                     }
-                    let (_, font) = loaded_fonts[idx];
-                    current_fragment.font = Some(font);
+                    let (_, font) = &loaded_fonts[idx];
+                    current_fragment.font = Some(font.clone());
                 }
                 current_fragment.text.push(c);
             } else if let Some(idx) = idx_opt {
-                let font = loaded_fonts[idx].1;
-                if let Some(current_font) = current_fragment.font {
+                let font = &loaded_fonts[idx].1;
+                if let Some(current_font) = current_fragment.font.as_ref() {
                     if current_font == font {
                         current_fragment.text.push(c);
                     } else {
@@ -148,17 +157,17 @@ fn string_to_text(
                             current_fragment = Default::default();
                         }
                         current_fragment.text.push(c);
-                        current_fragment.font = Some(font);
+                        current_fragment.font = Some(font.clone());
                     }
                 } else if current_fragment.text.is_empty() {
                     current_fragment.text.push(c);
-                    current_fragment.font = Some(font);
+                    current_fragment.font = Some(font.clone());
                 } else {
                     text.add(current_fragment);
                     current_fragment = Default::default();
 
                     current_fragment.text.push(c);
-                    current_fragment.font = Some(font);
+                    current_fragment.font = Some(font.clone());
                 }
             } else {
                 if !current_fragment.text.is_empty() && current_fragment.font.is_some() {
@@ -213,7 +222,7 @@ pub struct MPDDisplay {
     hide_text: bool,
     tried_album_art_in_dir: bool,
     mpd_play_state: MPDPlayState,
-    loaded_fonts: Vec<(PathBuf, Font)>,
+    loaded_fonts: Vec<(PathBuf, String)>,
 }
 
 impl MPDDisplay {
@@ -292,24 +301,24 @@ impl MPDDisplay {
     fn get_album_art_transform(&mut self, ctx: &mut Context, fill_scaled: bool) {
         if fill_scaled {
             if let Some(image) = &self.album_art {
-                let screen_coords: Rect = graphics::screen_coordinates(ctx);
-                let art_rect: Rect = image.dimensions();
+                let drawable_size = ctx.gfx.drawable_size();
+                let art_rect: Rect = image.dimensions(ctx).expect("Image should have dimensions");
 
                 // try to fit to width first
-                let mut x_scale = screen_coords.w / art_rect.w;
+                let mut x_scale = drawable_size.0 / art_rect.w;
                 let mut y_scale = x_scale;
                 let mut new_width = art_rect.w * x_scale;
                 let mut new_height = art_rect.h * y_scale;
-                if new_height > screen_coords.h.abs() {
+                if new_height > drawable_size.1.abs() {
                     // fit to height instead
-                    y_scale = screen_coords.h.abs() / art_rect.h;
+                    y_scale = drawable_size.1.abs() / art_rect.h;
                     x_scale = y_scale;
                     new_width = art_rect.w * x_scale;
                     new_height = art_rect.h * y_scale;
                 }
 
-                let offset_x: f32 = (screen_coords.w.abs() - new_width) / 2.0f32;
-                let offset_y: f32 = (screen_coords.h.abs() - new_height) / 2.0f32;
+                let offset_x: f32 = (drawable_size.0.abs() - new_width) / 2.0f32;
+                let offset_y: f32 = (drawable_size.1.abs() - new_height) / 2.0f32;
 
                 self.album_art_draw_transform = Some(Transform::Values {
                     dest: [offset_x, offset_y].into(),
@@ -321,10 +330,10 @@ impl MPDDisplay {
                 self.album_art_draw_transform = None;
             }
         } else if let Some(image) = &self.album_art {
-            let screen_coords: Rect = graphics::screen_coordinates(ctx);
-            let art_rect: Rect = image.dimensions();
-            let offset_x: f32 = (screen_coords.w.abs() - art_rect.w.abs()) / 2.0f32;
-            let offset_y: f32 = (screen_coords.h.abs() - art_rect.h.abs()) / 2.0f32;
+            let drawable_size = ctx.gfx.drawable_size();
+            let art_rect: Rect = image.dimensions(ctx).expect("Image should have dimensions");
+            let offset_x: f32 = (drawable_size.0.abs() - art_rect.w.abs()) / 2.0f32;
+            let offset_y: f32 = (drawable_size.1.abs() - art_rect.h.abs()) / 2.0f32;
             self.album_art_draw_transform = Some(Transform::Values {
                 dest: [offset_x, offset_y].into(),
                 rotation: 0.0f32,
@@ -430,13 +439,13 @@ impl MPDDisplay {
         }
         let img = img_result?;
         let rgba8 = img.to_rgba8();
-        let ggez_img = Image::from_rgba8(
+        let ggez_img = Image::from_pixels(
             ctx,
-            rgba8.width() as u16,
-            rgba8.height() as u16,
             rgba8.as_raw(),
-        )
-        .map_err(|e| format!("Error: Failed to load album art image in ggez Image: {}", e))?;
+            wgpu::TextureFormat::Rgba8Unorm,
+            rgba8.width(),
+            rgba8.height(),
+        );
 
         self.album_art = Some(ggez_img);
 
@@ -444,14 +453,14 @@ impl MPDDisplay {
     }
 
     fn refresh_text_transforms(&mut self, ctx: &mut Context) -> GameResult<()> {
-        let screen_coords: Rect = graphics::screen_coordinates(ctx);
+        let drawable_size = ctx.gfx.drawable_size();
 
-        let text_height_limit = TEXT_HEIGHT_SCALE * screen_coords.h.abs();
-        let album_height_limit = ALBUM_HEIGHT_SCALE * screen_coords.h.abs();
-        let artist_height_limit = ARTIST_HEIGHT_SCALE * screen_coords.h.abs();
-        let timer_height = TIMER_HEIGHT_SCALE * screen_coords.h.abs();
+        let text_height_limit = TEXT_HEIGHT_SCALE * drawable_size.1.abs();
+        let album_height_limit = ALBUM_HEIGHT_SCALE * drawable_size.1.abs();
+        let artist_height_limit = ARTIST_HEIGHT_SCALE * drawable_size.1.abs();
+        let timer_height = TIMER_HEIGHT_SCALE * drawable_size.1.abs();
 
-        let mut offset_y: f32 = screen_coords.h;
+        let mut offset_y: f32 = drawable_size.1;
 
         let mut filename_y: f32 = 0.0;
         let mut album_y: f32 = 0.0;
@@ -470,8 +479,7 @@ impl MPDDisplay {
                              timer_y: &mut f32| {
             let mut current_x = INIT_FONT_SIZE_X;
             let mut current_y = INIT_FONT_SIZE_Y;
-            let mut width: f32;
-            let mut height: f32 = 0.0;
+            let mut width_height: Vector2<f32> = Vector2 { x: 0.0, y: 0.0 };
             let mut iteration_count: u8 = 0;
             loop {
                 iteration_count += 1;
@@ -485,12 +493,13 @@ impl MPDDisplay {
                         y: current_y,
                     });
                 }
-                width = text.width(ctx);
-                height = text.height(ctx);
+                width_height = text
+                    .measure(ctx)
+                    .expect("Should be able to get width/height of text.");
 
                 if is_string {
-                    if screen_coords.w < width
-                        || height
+                    if drawable_size.0 < width_height.x
+                        || width_height.y
                             >= (if is_artist {
                                 artist_height_limit
                             } else if is_album {
@@ -502,7 +511,7 @@ impl MPDDisplay {
                         current_x *= DECREASE_AMT;
                         current_y *= DECREASE_AMT;
                         continue;
-                    } else if screen_coords.w * MIN_WIDTH_RATIO > width {
+                    } else if drawable_size.0 * MIN_WIDTH_RATIO > width_height.x {
                         current_x *= INCREASE_AMT;
                         current_y *= INCREASE_AMT;
                         continue;
@@ -510,7 +519,7 @@ impl MPDDisplay {
                         break;
                     }
                 } else {
-                    let diff_scale_y = current_y / height * timer_height;
+                    let diff_scale_y = current_y / width_height.y * timer_height;
                     let current_x = current_x * diff_scale_y / current_y;
                     for fragment in text.fragments_mut() {
                         fragment.scale = Some(PxScale {
@@ -521,20 +530,23 @@ impl MPDDisplay {
                     *timer_x = current_x;
                     *timer_y = diff_scale_y;
                     // width = text.width(ctx); // not really used after this
-                    height = text.height(ctx);
+                    width_height.y = text
+                        .measure(ctx)
+                        .expect("Should be able to get width/height of text.")
+                        .y;
                     break;
                 }
             }
 
-            *y = *offset_y - height;
+            *y = *offset_y - width_height.y;
             *transform = Transform::Values {
-                dest: [TEXT_X_OFFSET, *offset_y - height].into(),
+                dest: [TEXT_X_OFFSET, *offset_y - width_height.y].into(),
                 rotation: 0.0,
                 scale: [1.0, 1.0].into(),
                 offset: [0.0, 0.0].into(),
             };
 
-            *offset_y -= height + TEXT_OFFSET_Y_SPACING;
+            *offset_y -= width_height.y + TEXT_OFFSET_Y_SPACING;
         };
 
         if !self.filename_text.contents().is_empty() && !self.opts.disable_show_filename {
@@ -623,11 +635,26 @@ impl MPDDisplay {
             &mut self.timer_y,
         );
 
-        let filename_dimensions = self.filename_text.dimensions(ctx);
-        let album_dimensions = self.album_text.dimensions(ctx);
-        let artist_dimensions = self.artist_text.dimensions(ctx);
-        let title_dimensions = self.title_text.dimensions(ctx);
-        let timer_dimensions = self.timer_text.dimensions(ctx);
+        let filename_dimensions = self
+            .filename_text
+            .dimensions(ctx)
+            .expect("Should be able to get dimensions of Text.");
+        let album_dimensions = self
+            .album_text
+            .dimensions(ctx)
+            .expect("Should be able to get dimensions of Text.");
+        let artist_dimensions = self
+            .artist_text
+            .dimensions(ctx)
+            .expect("Should be able to get dimensions of Text.");
+        let title_dimensions = self
+            .title_text
+            .dimensions(ctx)
+            .expect("Should be able to get dimensions of Text.");
+        let timer_dimensions = self
+            .timer_text
+            .dimensions(ctx)
+            .expect("Should be able to get dimensions of Text.");
 
         let mut mesh_builder: MeshBuilder = MeshBuilder::new();
         if !self.opts.disable_show_filename {
@@ -678,18 +705,21 @@ impl MPDDisplay {
                 Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?;
         }
-        let mesh: Mesh = mesh_builder
-            .rectangle(
-                DrawMode::fill(),
-                Rect {
-                    x: TEXT_X_OFFSET,
-                    y: timer_y,
-                    w: timer_dimensions.w,
-                    h: timer_dimensions.h,
-                },
-                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
-            )?
-            .build(ctx)?;
+        let mesh: Mesh = Mesh::from_data(
+            ctx,
+            mesh_builder
+                .rectangle(
+                    DrawMode::fill(),
+                    Rect {
+                        x: TEXT_X_OFFSET,
+                        y: timer_y,
+                        w: timer_dimensions.w,
+                        h: timer_dimensions.h,
+                    },
+                    Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
+                )?
+                .build(),
+        );
 
         self.text_bg_mesh = Some(mesh);
 
@@ -889,102 +919,99 @@ impl EventHandler for MPDDisplay {
             }
         }
 
-        let delta = timer::delta(ctx);
+        let delta = ctx.time.delta();
         self.timer += delta.as_secs_f64();
         let timer_diff = seconds_to_time(self.length - self.timer);
         self.timer_text = Text::new(timer_diff);
-        self.timer_text.set_font(
-            Font::default(),
-            PxScale {
-                x: self.timer_x,
-                y: self.timer_y,
-            },
-        );
+        self.timer_text.set_scale(PxScale {
+            x: self.timer_x,
+            y: self.timer_y,
+        });
 
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
-        graphics::clear(ctx, Color::BLACK);
+        let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
 
         if self.mpd_play_state != MPDPlayState::Stopped
             && self.album_art.is_some()
             && self.album_art_draw_transform.is_some()
         {
-            self.album_art.as_ref().unwrap().draw(
-                ctx,
+            canvas.draw(
+                self.album_art.as_ref().unwrap(),
                 DrawParam {
-                    trans: self.album_art_draw_transform.unwrap(),
+                    transform: self.album_art_draw_transform.unwrap(),
                     ..Default::default()
                 },
-            )?;
+            );
         }
 
         if !self.hide_text {
-            self.notice_text.draw(ctx, DrawParam::default())?;
+            canvas.draw(&self.notice_text, DrawParam::default());
 
             if self.mpd_play_state != MPDPlayState::Stopped && self.is_valid && self.is_initialized
             {
                 if let Some(mesh) = &self.text_bg_mesh {
-                    mesh.draw(ctx, DrawParam::default())?;
+                    canvas.draw(mesh, DrawParam::default());
                 }
 
                 if !self.opts.disable_show_filename {
-                    self.filename_text.draw(
-                        ctx,
+                    canvas.draw(
+                        &self.filename_text,
                         DrawParam {
-                            trans: self.filename_transform,
+                            transform: self.filename_transform,
                             ..Default::default()
                         },
-                    )?;
+                    );
                 }
 
                 if !self.opts.disable_show_album {
-                    self.album_text.draw(
-                        ctx,
+                    canvas.draw(
+                        &self.album_text,
                         DrawParam {
-                            trans: self.album_transform,
+                            transform: self.album_transform,
                             ..Default::default()
                         },
-                    )?;
+                    );
                 }
 
                 if !self.opts.disable_show_artist {
-                    self.artist_text.draw(
-                        ctx,
+                    canvas.draw(
+                        &self.artist_text,
                         DrawParam {
-                            trans: self.artist_transform,
+                            transform: self.artist_transform,
                             ..Default::default()
                         },
-                    )?;
+                    );
                 }
 
                 if !self.opts.disable_show_title {
-                    self.title_text.draw(
-                        ctx,
+                    canvas.draw(
+                        &self.title_text,
                         DrawParam {
-                            trans: self.title_transform,
+                            transform: self.title_transform,
                             ..Default::default()
                         },
-                    )?;
+                    );
                 }
 
                 if self.mpd_play_state == MPDPlayState::Playing {
-                    self.timer_text.draw(
-                        ctx,
+                    canvas.draw(
+                        &self.timer_text,
                         DrawParam {
-                            trans: self.timer_transform,
+                            transform: self.timer_transform,
                             ..Default::default()
                         },
-                    )?;
+                    );
                 }
             }
         }
 
-        graphics::present(ctx)
+        canvas.finish(ctx)
     }
 
-    fn text_input_event(&mut self, _ctx: &mut Context, character: char) {
+    fn text_input_event(&mut self, _ctx: &mut Context, character: char) -> Result<(), GameError> {
         if !self.is_initialized && self.opts.enable_prompt_password && !character.is_control() {
             if self.opts.password.is_none() {
                 let s = String::from(character);
@@ -995,17 +1022,18 @@ impl EventHandler for MPDDisplay {
                 self.notice_text.add('*');
             }
         }
+
+        Ok(())
     }
 
     fn key_down_event(
         &mut self,
         _ctx: &mut Context,
-        keycode: event::KeyCode,
-        _keymods: event::KeyMods,
+        input: KeyInput,
         _repeat: bool,
-    ) {
+    ) -> Result<(), GameError> {
         if !self.is_initialized && self.opts.enable_prompt_password {
-            if keycode == event::KeyCode::Back {
+            if input.keycode == Some(keyboard::KeyCode::Back) {
                 let s: String = self.notice_text.contents();
 
                 if s.ends_with('*') {
@@ -1015,28 +1043,34 @@ impl EventHandler for MPDDisplay {
                 if let Some(input_p) = &mut self.opts.password {
                     input_p.pop();
                 }
-            } else if keycode == event::KeyCode::Return {
+            } else if input.keycode == Some(keyboard::KeyCode::Return) {
                 self.password_entered = true;
             }
-        } else if keycode == event::KeyCode::H {
+        } else if input.keycode == Some(keyboard::KeyCode::H) {
             self.hide_text = true;
         }
+
+        Ok(())
     }
 
-    fn key_up_event(
-        &mut self,
-        _ctx: &mut Context,
-        keycode: event::KeyCode,
-        _keymods: event::KeyMods,
-    ) {
-        if keycode == event::KeyCode::H {
+    fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> Result<(), GameError> {
+        if input.keycode == Some(keyboard::KeyCode::H) {
             self.hide_text = false;
         }
+
+        Ok(())
     }
 
-    fn resize_event(&mut self, ctx: &mut Context, _width: f32, _height: f32) {
+    fn resize_event(
+        &mut self,
+        ctx: &mut Context,
+        _width: f32,
+        _height: f32,
+    ) -> Result<(), GameError> {
         self.get_album_art_transform(ctx, !self.opts.do_not_fill_scale_album_art);
         self.refresh_text_transforms(ctx)
             .expect("Failed to set text transforms");
+
+        Ok(())
     }
 }

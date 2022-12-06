@@ -1,18 +1,20 @@
 [package]
 name = "mpd_info_screen"
-version = "0.3.7"
+version = "0.3.8"
 edition = "2018"
 description = "Displays info on currently playing music from an MPD daemon"
 license = "MIT"
 repository = "https://github.com/Stephen-Seo/mpd_info_screen"
+resolver = "2"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 structopt = "0.3"
 image = "0.24"
-ggez = "0.7"
+ggez = "0.8.1"
 freetype = { version = "0.7", optional = true }
+wgpu = "0.14"
 
 [build-dependencies]
 bindgen = { version = "0.53", optional = true }
