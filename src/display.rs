@@ -442,7 +442,7 @@ impl MPDDisplay {
         let ggez_img = Image::from_pixels(
             ctx,
             rgba8.as_raw(),
-            wgpu::TextureFormat::Rgba8Unorm,
+            wgpu::TextureFormat::Rgba8UnormSrgb,
             rgba8.width(),
             rgba8.height(),
         );
