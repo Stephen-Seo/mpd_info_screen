@@ -3,8 +3,8 @@ use crate::mpd_handler::{InfoFromShared, MPDHandler, MPDHandlerState, MPDPlaySta
 use crate::Opt;
 use ggez::event::EventHandler;
 use ggez::graphics::{
-    self, Color, DrawMode, DrawParam, Drawable, FontData, Image, Mesh, MeshBuilder, PxScale, Rect,
-    Text, TextFragment, Transform,
+    self, Color, DrawMode, DrawParam, Drawable, Image, Mesh, MeshBuilder, PxScale, Rect, Text,
+    TextFragment, Transform,
 };
 use ggez::input::keyboard::{self, KeyInput};
 use ggez::mint::Vector2;
@@ -92,7 +92,7 @@ fn string_to_text(
 
             let find_result = unicode_support::get_matching_font_from_char(c);
             if let Ok(path) = find_result {
-                let new_font = FontData::from_path(ctx, &path);
+                let new_font = ggez::graphics::FontData::from_path(ctx, &path);
                 if let Ok(font) = new_font {
                     let font_name: String = path
                         .file_name()
