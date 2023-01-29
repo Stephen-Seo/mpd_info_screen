@@ -12,6 +12,10 @@ A Rust program that displays info about the currently running MPD server.
 The window shows albumart (may be embedded in the audio file, or is a "cover.jpg" in the same directory as the song file), a "time-remaining"
 counter, and the filename currently being played
 
+## Known Bugs ❗❗
+
+Currently, the dependency "ggez 0.8.1" fails to render album art on my machines using this program. Version 0.4.1 cannot be published to https://crates.io due to this version referring to a git commit as a dependency. Once ggez has released a new version with the commit that fixes this bug, this repository will be updated to use that version.
+
 ## Unicode Support
 
 By default, unicode characters will not display properly. Build the project with
