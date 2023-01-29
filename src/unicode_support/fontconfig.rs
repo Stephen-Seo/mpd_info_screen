@@ -67,8 +67,7 @@ mod ffi {
                         return Err(String::from("Failed to FcFontMatch (FcResult is not FcResultMatch; result_pattern is not null)"));
                     } else {
                         return Err(format!(
-                            "Failed to FcFontMatch (FcResult is not FcResultMatch; {:?})",
-                            result
+                            "Failed to FcFontMatch (FcResult is not FcResultMatch; {result:?})"
                         ));
                     }
                 } else if result_pattern.is_null() {

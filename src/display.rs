@@ -112,7 +112,7 @@ fn string_to_text(
                 }
             } else {
                 log(
-                    format!("Failed to find font for {}", c),
+                    format!("Failed to find font for {c}"),
                     debug_log::LogState::Error,
                     debug_log::LogLevel::Error,
                 );
@@ -234,7 +234,7 @@ impl MPDDisplay {
             is_initialized: false,
             is_authenticated: false,
             notice_text: Text::default(),
-            poll_instant: Instant::now() - POLL_TIME,
+            poll_instant: Instant::now().checked_sub(POLL_TIME).unwrap(),
             shared: None,
             password_entered: false,
             dirty_flag: None,
@@ -411,13 +411,10 @@ impl MPDDisplay {
             let reader = ImageReader::new(Cursor::new(image_ref));
             let guessed_reader = reader
                 .with_guessed_format()
-                .map_err(|e| format!("Error: Failed to guess format of album art image: {}", e));
+                .map_err(|e| format!("Error: Failed to guess format of album art image: {e}"));
             if let Ok(reader) = guessed_reader {
                 reader.decode().map_err(|e| {
-                    format!(
-                        "Error: Failed to decode album art image (guessed format): {}",
-                        e
-                    )
+                    format!("Error: Failed to decode album art image (guessed format): {e}")
                 })
             } else {
                 // Convert Ok(_) to Ok(DynamicImage) which will never be used
@@ -427,7 +424,7 @@ impl MPDDisplay {
         } else {
             ImageReader::with_format(Cursor::new(image_ref), image_format)
                 .decode()
-                .map_err(|e| format!("Error: Failed to decode album art image: {}", e))
+                .map_err(|e| format!("Error: Failed to decode album art image: {e}"))
         };
         if img_result.is_err() && !self.tried_album_art_in_dir {
             return try_second_art_fetch_method(
@@ -732,8 +729,7 @@ impl EventHandler for MPDDisplay {
         if !self.is_valid {
             if let Err(mpd_handler_error) = &self.mpd_handler {
                 return Err(GameError::EventLoopError(format!(
-                    "Failed to initialize MPDHandler: {}",
-                    mpd_handler_error
+                    "Failed to initialize MPDHandler: {mpd_handler_error}"
                 )));
             } else {
                 return Err(GameError::EventLoopError(

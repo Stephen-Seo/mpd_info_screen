@@ -131,7 +131,7 @@ fn main() -> Result<(), String> {
                     display.text_input_event(ctx, ch).ok();
                 }
                 x => log(
-                    format!("Other window event fired: {:?}", x),
+                    format!("Other window event fired: {x:?}"),
                     debug_log::LogState::Verbose,
                     opt.log_level,
                 ),
@@ -162,7 +162,7 @@ fn main() -> Result<(), String> {
                 ggez::timer::yield_now();
             }
             x => log(
-                format!("Device event fired: {:?}", x),
+                format!("Device event fired: {x:?}"),
                 debug_log::LogState::Verbose,
                 opt.log_level,
             ),

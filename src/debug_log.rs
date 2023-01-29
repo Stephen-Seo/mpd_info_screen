@@ -46,26 +46,26 @@ pub fn log_error<T>(msg: T)
 where
     T: Display,
 {
-    println!("Error: {}", msg);
+    println!("Error: {msg}");
 }
 
 pub fn log_warning<T>(msg: T)
 where
     T: Display,
 {
-    println!("Warning: {}", msg);
+    println!("Warning: {msg}");
 }
 
 pub fn log_debug<T>(msg: T)
 where
     T: Display,
 {
-    println!("Debug: {}", msg);
+    println!("Debug: {msg}");
 }
 
 pub fn log_verbose<T>(msg: T)
 where
     T: Display,
 {
-    println!("Verbose: {}", msg);
+    println!("Verbose: {msg}");
 }

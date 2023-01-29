@@ -274,9 +274,9 @@ impl MPDHandler {
                 did_check_overtime: false,
                 force_get_status: false,
                 force_get_current_song: false,
-                song_title_get_time: Instant::now() - Duration::from_secs(10),
-                song_pos_get_time: Instant::now() - Duration::from_secs(10),
-                song_length_get_time: Instant::now() - Duration::from_secs(10),
+                song_title_get_time: Instant::now().checked_sub(Duration::from_secs(10)).unwrap(),
+                song_pos_get_time: Instant::now().checked_sub(Duration::from_secs(10)).unwrap(),
+                song_length_get_time: Instant::now().checked_sub(Duration::from_secs(10)).unwrap(),
                 self_thread: None,
                 dirty_flag: Arc::new(AtomicBool::new(true)),
                 stop_flag: Arc::new(AtomicBool::new(false)),
@@ -426,13 +426,13 @@ impl MPDHandler {
 
             if let Err(err_string) = self.handler_read_block(&mut buf, &mut saved, &mut saved_str) {
                 log(
-                    format!("read_block error: {}", err_string),
+                    format!("read_block error: {err_string}"),
                     LogState::Warning,
                     log_level,
                 );
             } else if let Err(err_string) = self.handler_write_block() {
                 log(
-                    format!("write_block error: {}", err_string),
+                    format!("write_block error: {err_string}"),
                     LogState::Warning,
                     log_level,
                 );
@@ -477,7 +477,7 @@ impl MPDHandler {
         let read_result = write_handle.stream.read(buf);
         if let Err(io_err) = read_result {
             if io_err.kind() != io::ErrorKind::WouldBlock {
-                return Err(format!("TCP stream error: {}", io_err));
+                return Err(format!("TCP stream error: {io_err}"));
             } else {
                 return Ok(());
             }
@@ -649,9 +649,9 @@ impl MPDHandler {
                             MPDPlayState::Paused
                         };
                         write_handle.error_text.clear();
-                        write!(&mut write_handle.error_text, "MPD has {:?}", got_mpd_state).ok();
+                        write!(&mut write_handle.error_text, "MPD has {got_mpd_state:?}").ok();
                         log(
-                            format!("MPD is {:?}", got_mpd_state),
+                            format!("MPD is {got_mpd_state:?}"),
                             LogState::Warning,
                             write_handle.log_level,
                         );
@@ -736,7 +736,7 @@ impl MPDHandler {
                     write_handle.art_data_type = line.split_off(6);
                 } else {
                     log(
-                        format!("Got unrecognized/ignored line: {}", line),
+                        format!("Got unrecognized/ignored line: {line}"),
                         LogState::Warning,
                         write_handle.log_level,
                     );
@@ -799,12 +799,12 @@ impl MPDHandler {
                 let p = write_handle.password.clone();
                 let write_result = write_handle
                     .stream
-                    .write(format!("password {}\n", p).as_bytes());
+                    .write(format!("password {p}\n").as_bytes());
                 if write_result.is_ok() {
                     write_handle.poll_state = PollState::Password;
                 } else if let Err(e) = write_result {
                     log(
-                        format!("Failed to send password for authentication: {}", e),
+                        format!("Failed to send password for authentication: {e}"),
                         LogState::Error,
                         write_handle.log_level,
                     );
@@ -820,7 +820,7 @@ impl MPDHandler {
                     write_handle.poll_state = PollState::CurrentSong;
                 } else if let Err(e) = write_result {
                     log(
-                        format!("Failed to request song info over stream: {}", e),
+                        format!("Failed to request song info over stream: {e}"),
                         LogState::Error,
                         write_handle.log_level,
                     );
@@ -836,7 +836,7 @@ impl MPDHandler {
                     write_handle.poll_state = PollState::Status;
                 } else if let Err(e) = write_result {
                     log(
-                        format!("Failed to request status over stream: {}", e),
+                        format!("Failed to request status over stream: {e}"),
                         LogState::Error,
                         write_handle.log_level,
                     );
@@ -848,14 +848,14 @@ impl MPDHandler {
                 let title = write_handle.current_song_filename.clone();
                 let art_data_length = write_handle.art_data.len();
                 if write_handle.can_get_album_art {
-                    let write_result = write_handle.stream.write(
-                        format!("readpicture \"{}\" {}\n", title, art_data_length).as_bytes(),
-                    );
+                    let write_result = write_handle
+                        .stream
+                        .write(format!("readpicture \"{title}\" {art_data_length}\n").as_bytes());
                     if write_result.is_ok() {
                         write_handle.poll_state = PollState::ReadPicture;
                     } else if let Err(e) = write_result {
                         log(
-                            format!("Failed to request album art: {}", e),
+                            format!("Failed to request album art: {e}"),
                             LogState::Error,
                             write_handle.log_level,
                         );
@@ -863,12 +863,12 @@ impl MPDHandler {
                 } else if write_handle.can_get_album_art_in_dir {
                     let write_result = write_handle
                         .stream
-                        .write(format!("albumart \"{}\" {}\n", title, art_data_length).as_bytes());
+                        .write(format!("albumart \"{title}\" {art_data_length}\n").as_bytes());
                     if write_result.is_ok() {
                         write_handle.poll_state = PollState::ReadPictureInDir;
                     } else if let Err(e) = write_result {
                         log(
-                            format!("Failed to request album art in dir: {}", e),
+                            format!("Failed to request album art in dir: {e}"),
                             LogState::Error,
                             write_handle.log_level,
                         );
