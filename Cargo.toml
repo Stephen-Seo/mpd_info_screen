@@ -12,7 +12,8 @@ resolver = "2"
 [dependencies]
 structopt = "0.3"
 image = "0.24"
-ggez = "0.8.1"
+#ggez = "0.8.1"
+ggez = { git = "https://github.com/ggez/ggez.git", rev = "f87f078346729737b4691b9618eab3f95d61c8ad" }
 freetype = { version = "0.7", optional = true }
 wgpu = "0.14"
 
