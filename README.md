@@ -16,6 +16,9 @@ counter, and the filename currently being played
 
 Currently, the dependency "ggez 0.8.1" [fails to render album art](https://github.com/Stephen-Seo/mpd_info_screen/issues/1) on my machines using this program. Version 0.4.1 cannot be published to https://crates.io due to this version referring to a git commit as a dependency. Once ggez has released a new version with the commit that fixes this bug, this repository will be updated to use that version.
 
+The `devel` branch has a fix for mpd\_info\_screen not displaying properly when
+no password is provided and MPD can be accessed without a password.
+
 ## Unicode Support
 
 By default, unicode characters will not display properly. Build the project with
