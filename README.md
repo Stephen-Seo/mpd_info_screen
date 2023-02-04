@@ -18,6 +18,7 @@ Currently, the dependency "ggez 0.8.1" [fails to render album art](https://githu
 
 The `devel` branch has a fix for mpd\_info\_screen [not displaying properly when
 no password is provided and MPD can be accessed without a password](https://github.com/Stephen-Seo/mpd_info_screen/issues/2).
+(This has been backported to `main` and for the workaround `0.4.3` version.)
 
 ## Unicode Support
 
