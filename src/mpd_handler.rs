@@ -250,6 +250,8 @@ impl MPDHandler {
         )
         .map_err(|_| String::from("Failed to get TCP connection (is MPD running?)"))?;
 
+        let password_is_empty = password.is_empty();
+
         let s = MPDHandler {
             state: Arc::new(RwLock::new(MPDHandlerState {
                 art_data: Vec::new(),
@@ -263,10 +265,10 @@ impl MPDHandler {
                 current_binary_size: 0,
                 poll_state: PollState::None,
                 stream,
-                password: password.clone(),
+                password,
                 error_text: String::new(),
                 can_authenticate: true,
-                is_authenticated: password.is_empty(),
+                is_authenticated: password_is_empty,
                 can_get_album_art: true,
                 can_get_album_art_in_dir: true,
                 can_get_status: true,
