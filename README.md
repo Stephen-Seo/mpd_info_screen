@@ -14,9 +14,9 @@ counter, and the filename currently being played
 
 ## Known Bugs ❗❗
 
-Version `0.4.2` is a "workaround" release that is branched off of version
+Version `0.4.3` is a "workaround" release that is branched off of version
 `0.3.7`. Once a new release of `ggez` is released that fixes the known bugs,
-version `0.4.3` will be released with the fixes. Because this is based on
+a new version will be released with the fixes. Because this is based on
 `0.3.7` of `mpd_info_screen`, Wayland support may not work. Try using `xwayland`
 with the environment variable `WINIT_UNIX_BACKEND=x11` set.
 
@@ -48,7 +48,7 @@ or through crates.io:
 # Usage
 
 
-    mpd_info_screen 0.4.2
+    mpd_info_screen 0.4.3
     
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
