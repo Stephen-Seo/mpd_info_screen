@@ -18,7 +18,8 @@ Version `0.4.3` is a "workaround" release that is branched off of version
 `0.3.7`. Once a new release of `ggez` is released that fixes the known bugs,
 a new version will be released with the fixes. Because this is based on
 `0.3.7` of `mpd_info_screen`, Wayland support may not work. Try using `xwayland`
-with the environment variable `WINIT_UNIX_BACKEND=x11` set.
+with the environment variable `WINIT_UNIX_BACKEND=x11` set. A future release
+using the latest version of `ggez` should work with Wayland.
 
 Currently, the dependency "ggez 0.8.1" [fails to render album
 art](https://github.com/Stephen-Seo/mpd_info_screen/issues/1) on my machines
@@ -28,7 +29,8 @@ as a dependency. Once ggez has released a new version with the commit that
 fixes this bug, this repository will be updated to use that version.
 
 The `devel` branch has a fix for mpd\_info\_screen not displaying properly when
-no password is provided and MPD can be accessed without a password.
+no password is provided and MPD can be accessed without a password. This fix
+has been backported for version `0.4.3`.
 
 ## Unicode Support
 
