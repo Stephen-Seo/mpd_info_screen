@@ -38,8 +38,6 @@ or through crates.io:
 # Usage
 
 
-    mpd_info_screen 0.3.7
-    
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
     
@@ -56,6 +54,7 @@ or through crates.io:
     OPTIONS:
         -l, --log-level <log-level>                 [default: Error]  [possible values: Error, Warning, Debug, Verbose]
         -p <password>
+            --pfile <password-file>                read password from file
         -t, --text-bg-opacity <text-bg-opacity>    sets the opacity of the text background (0-255) [default: 190]
     
     ARGS:
