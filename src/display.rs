@@ -213,11 +213,17 @@ pub struct MPDDisplay {
     album_string_cache: String,
     album_transform: Transform,
     timer_text: Text,
+    timer_text_len: usize,
     timer_transform: Transform,
     timer_x: f32,
     timer_y: f32,
     timer: f64,
     length: f64,
+    cached_filename_y: f32,
+    cached_album_y: f32,
+    cached_artist_y: f32,
+    cached_title_y: f32,
+    cached_timer_y: f32,
     text_bg_mesh: Option<Mesh>,
     hide_text: bool,
     tried_album_art_in_dir: bool,
@@ -247,11 +253,17 @@ impl MPDDisplay {
             title_text: Text::default(),
             title_transform: Transform::default(),
             timer_text: Text::new("0"),
+            timer_text_len: 0,
             timer_transform: Transform::default(),
             timer_x: INIT_FONT_SIZE_X,
             timer_y: INIT_FONT_SIZE_Y,
             timer: 0.0,
             length: 0.0,
+            cached_filename_y: 0.0f32,
+            cached_album_y: 0.0f32,
+            cached_artist_y: 0.0f32,
+            cached_title_y: 0.0f32,
+            cached_timer_y: 0.0f32,
             text_bg_mesh: None,
             hide_text: false,
             tried_album_art_in_dir: false,
@@ -459,12 +471,6 @@ impl MPDDisplay {
 
         let mut offset_y: f32 = drawable_size.1;
 
-        let mut filename_y: f32 = 0.0;
-        let mut album_y: f32 = 0.0;
-        let mut artist_y: f32 = 0.0;
-        let mut title_y: f32 = 0.0;
-        let mut timer_y: f32 = 0.0;
-
         let set_transform = |text: &mut Text,
                              transform: &mut Transform,
                              offset_y: &mut f32,
@@ -551,7 +557,7 @@ impl MPDDisplay {
                 &mut self.filename_text,
                 &mut self.filename_transform,
                 &mut offset_y,
-                &mut filename_y,
+                &mut self.cached_filename_y,
                 true,
                 false,
                 false,
@@ -571,7 +577,7 @@ impl MPDDisplay {
                 &mut self.album_text,
                 &mut self.album_transform,
                 &mut offset_y,
-                &mut album_y,
+                &mut self.cached_album_y,
                 true,
                 false,
                 true,
@@ -585,7 +591,7 @@ impl MPDDisplay {
                 &mut self.artist_text,
                 &mut self.artist_transform,
                 &mut offset_y,
-                &mut artist_y,
+                &mut self.cached_artist_y,
                 true,
                 true,
                 false,
@@ -605,7 +611,7 @@ impl MPDDisplay {
                 &mut self.title_text,
                 &mut self.title_transform,
                 &mut offset_y,
-                &mut title_y,
+                &mut self.cached_title_y,
                 true,
                 false,
                 false,
@@ -624,7 +630,7 @@ impl MPDDisplay {
             &mut self.timer_text,
             &mut self.timer_transform,
             &mut offset_y,
-            &mut timer_y,
+            &mut self.cached_timer_y,
             false,
             false,
             false,
@@ -632,6 +638,12 @@ impl MPDDisplay {
             &mut self.timer_y,
         );
 
+        self.update_bg_mesh(ctx)?;
+
+        Ok(())
+    }
+
+    fn update_bg_mesh(&mut self, ctx: &mut Context) -> GameResult<()> {
         let filename_dimensions = self
             .filename_text
             .dimensions(ctx)
@@ -659,7 +671,7 @@ impl MPDDisplay {
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
-                    y: filename_y,
+                    y: self.cached_filename_y,
                     w: filename_dimensions.w,
                     h: filename_dimensions.h,
                 },
@@ -671,7 +683,7 @@ impl MPDDisplay {
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
-                    y: album_y,
+                    y: self.cached_album_y,
                     w: album_dimensions.w,
                     h: album_dimensions.h,
                 },
@@ -683,7 +695,7 @@ impl MPDDisplay {
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
-                    y: artist_y,
+                    y: self.cached_artist_y,
                     w: artist_dimensions.w,
                     h: artist_dimensions.h,
                 },
@@ -695,7 +707,7 @@ impl MPDDisplay {
                 DrawMode::fill(),
                 Rect {
                     x: TEXT_X_OFFSET,
-                    y: title_y,
+                    y: self.cached_title_y,
                     w: title_dimensions.w,
                     h: title_dimensions.h,
                 },
@@ -709,7 +721,7 @@ impl MPDDisplay {
                     DrawMode::fill(),
                     Rect {
                         x: TEXT_X_OFFSET,
-                        y: timer_y,
+                        y: self.cached_timer_y,
                         w: timer_dimensions.w,
                         h: timer_dimensions.h,
                     },
@@ -918,11 +930,16 @@ impl EventHandler for MPDDisplay {
         let delta = ctx.time.delta();
         self.timer += delta.as_secs_f64();
         let timer_diff = seconds_to_time(self.length - self.timer);
+        let timer_diff_len = timer_diff.len();
         self.timer_text = Text::new(timer_diff);
         self.timer_text.set_scale(PxScale {
             x: self.timer_x,
             y: self.timer_y,
         });
+        if timer_diff_len != self.timer_text_len {
+            self.timer_text_len = timer_diff_len;
+            self.update_bg_mesh(ctx)?;
+        }
 
         Ok(())
     }
