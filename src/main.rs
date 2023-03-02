@@ -10,6 +10,8 @@ use ggez::event::{self, ControlFlow, EventHandler};
 use ggez::filesystem::mount;
 use ggez::graphics::{self, Rect};
 use ggez::{ContextBuilder, GameError};
+use std::fs::File;
+use std::io::Read;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::thread;
@@ -36,6 +38,8 @@ pub struct Opt {
     disable_show_filename: bool,
     #[structopt(long = "pprompt", help = "input password via prompt")]
     enable_prompt_password: bool,
+    #[structopt(long = "pfile", help = "read password from file")]
+    password_file: Option<PathBuf>,
     #[structopt(
         long = "no-scale-fill",
         help = "don't scale-fill the album art to the window"
@@ -59,8 +63,25 @@ pub struct Opt {
 }
 
 fn main() -> Result<(), String> {
-    let opt = Opt::from_args();
+    let mut opt = Opt::from_args();
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
+
+    // Read password from file if exists, error otherwise.
+    if let Some(psswd_file_path) = opt.password_file.as_ref() {
+        let mut file = File::open(psswd_file_path).expect("pfile/password_file should exist");
+        let mut content: String = String::new();
+
+        file.read_to_string(&mut content)
+            .expect("Should be able to read from pfile/password_file");
+
+        if content.ends_with("\r\n") {
+            content.truncate(content.len() - 2);
+        } else if content.ends_with('\n') {
+            content.truncate(content.len() - 1);
+        }
+
+        opt.password = Some(content);
+    }
 
     let (mut ctx, event_loop) = ContextBuilder::new("mpd_info_screen", "Stephen Seo")
         .window_setup(WindowSetup {
