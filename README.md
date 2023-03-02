@@ -14,7 +14,7 @@ counter, and the filename currently being played
 
 ## Known Bugs ❗❗
 
-Version `0.4.4` is a "workaround" release that is branched off of version
+Version `0.4.5` is a "workaround" release that is branched off of version
 `0.3.7`. Once a new release of `ggez` is released that fixes the known bugs,
 a new version will be released with the fixes. Because this is based on
 `0.3.7` of `mpd_info_screen`, Wayland support may not work. Try using `xwayland`
@@ -47,8 +47,6 @@ or through crates.io:
 # Usage
 
 
-    mpd_info_screen 0.4.4
-    
     USAGE:
         mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
     
@@ -65,6 +63,7 @@ or through crates.io:
     OPTIONS:
         -l, --log-level <log-level>                 [default: Error]  [possible values: Error, Warning, Debug, Verbose]
         -p <password>
+            --pfile <password-file>                read password from file
         -t, --text-bg-opacity <text-bg-opacity>    sets the opacity of the text background (0-255) [default: 190]
     
     ARGS:
