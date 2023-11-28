@@ -1,5 +1,5 @@
 use std::fmt::Display;
-use structopt::clap::arg_enum;
+use clap::ValueEnum;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LogState {
@@ -9,14 +9,12 @@ pub enum LogState {
     Verbose,
 }
 
-arg_enum! {
-    #[derive(Copy, Clone, Debug, PartialEq, Eq)]
-    pub enum LogLevel {
-        Error,
-        Warning,
-        Debug,
-        Verbose,
-    }
+#[derive(ValueEnum, Copy, Clone, Debug, PartialEq, Eq)]
+pub enum LogLevel {
+    Error,
+    Warning,
+    Debug,
+    Verbose,
 }
 
 pub fn log<T>(msg: T, state: LogState, level: LogLevel)

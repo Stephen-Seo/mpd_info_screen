@@ -15,44 +15,42 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
-use structopt::StructOpt;
+use clap::Parser;
 
 use debug_log::log;
 
-#[derive(StructOpt, Debug, Clone)]
-#[structopt(name = "mpd_info_screen")]
+#[derive(Parser, Debug, Clone)]
+#[command(author, version, about, long_about = None)]
 pub struct Opt {
     host: Ipv4Addr,
-    #[structopt(default_value = "6600")]
+    #[arg(default_value = "6600")]
     port: u16,
-    #[structopt(short = "p")]
+    #[arg(short = 'p')]
     password: Option<String>,
-    #[structopt(long = "disable-show-title", help = "disable title display")]
+    #[arg(long = "disable-show-title", help = "disable title display")]
     disable_show_title: bool,
-    #[structopt(long = "disable-show-artist", help = "disable artist display")]
+    #[arg(long = "disable-show-artist", help = "disable artist display")]
     disable_show_artist: bool,
-    #[structopt(long = "disable-show-album", help = "disable album display")]
+    #[arg(long = "disable-show-album", help = "disable album display")]
     disable_show_album: bool,
-    #[structopt(long = "disable-show-filename", help = "disable filename display")]
+    #[arg(long = "disable-show-filename", help = "disable filename display")]
     disable_show_filename: bool,
-    #[structopt(long = "pprompt", help = "input password via prompt")]
+    #[arg(long = "pprompt", help = "input password via prompt")]
     enable_prompt_password: bool,
-    #[structopt(long = "pfile", help = "read password from file")]
+    #[arg(long = "pfile", help = "read password from file")]
     password_file: Option<PathBuf>,
-    #[structopt(
+    #[arg(
         long = "no-scale-fill",
         help = "don't scale-fill the album art to the window"
     )]
     do_not_fill_scale_album_art: bool,
-    #[structopt(
-        short = "l",
+    #[arg(
+        short = 'l',
         long = "log-level",
-        possible_values = &debug_log::LogLevel::variants(),
-        default_value = "Error",
-        case_insensitive = true,
+        default_value = "error",
     )]
     log_level: debug_log::LogLevel,
-    #[structopt(
+    #[arg(
         short,
         long,
         help = "sets the opacity of the text background (0-255)",
@@ -62,7 +60,7 @@ pub struct Opt {
 }
 
 fn main() -> Result<(), String> {
-    let mut opt = Opt::from_args();
+    let mut opt = Opt::parse();
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
 
     // Read password from file if exists, error otherwise.

@@ -35,28 +35,39 @@ or through crates.io:
 # Usage
 
 
-    USAGE:
-        mpd_info_screen [FLAGS] [OPTIONS] <host> [port]
+    Displays info on currently playing music from an MPD daemon
     
-    FLAGS:
-            --disable-show-album       disable album display
-            --disable-show-artist      disable artist display
-            --disable-show-filename    disable filename display
-            --disable-show-title       disable title display
-            --no-scale-fill            don't scale-fill the album art to the window
-            --pprompt                  input password via prompt
-        -h, --help                     Prints help information
-        -V, --version                  Prints version information
+    Usage: mpd_info_screen [OPTIONS] <HOST> [PORT]
     
-    OPTIONS:
-        -l, --log-level <log-level>                 [default: Error]  [possible values: Error, Warning, Debug, Verbose]
-        -p <password>
-            --pfile <password-file>                read password from file
-        -t, --text-bg-opacity <text-bg-opacity>    sets the opacity of the text background (0-255) [default: 190]
+    Arguments:
+      <HOST>
+      [PORT]  [default: 6600]
     
-    ARGS:
-        <host>
-        <port>     [default: 6600]
+    Options:
+      -p <PASSWORD>
+    
+          --disable-show-title
+              disable title display
+          --disable-show-artist
+              disable artist display
+          --disable-show-album
+              disable album display
+          --disable-show-filename
+              disable filename display
+          --pprompt
+              input password via prompt
+          --pfile <PASSWORD_FILE>
+              read password from file
+          --no-scale-fill
+              don't scale-fill the album art to the window
+      -l, --log-level <LOG_LEVEL>
+              [default: error] [possible values: error, warning, debug, verbose]
+      -t, --text-bg-opacity <TEXT_BG_OPACITY>
+              sets the opacity of the text background (0-255) [default: 190]
+      -h, --help
+              Print help
+      -V, --version
+              Print version
 
 
 Note that presing the Escape key when the window is focused closes the program.
