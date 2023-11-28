@@ -96,8 +96,8 @@ MIT license.
 Uses dependency [image](https://crates.io/crates/image) which is licensed under
 MIT license.
 
-Uses dependency [structopt](https://crates.io/crates/structopt) which is
-licensed under Apache-2.0 or MIT licenses.
+Uses dependency [clap](https://crates.io/crates/clap) which is licensed under
+Apache-2.0 or MIT licenses.
 
 ## Unicode Support Dependencies
 
