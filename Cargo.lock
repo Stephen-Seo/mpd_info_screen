@@ -1575,7 +1575,7 @@ dependencies = [
 
 [[package]]
 name = "mpd_info_screen"
-version = "0.4.7"
+version = "0.4.8"
 dependencies = [
  "bindgen",
  "clap",
