@@ -1,6 +1,6 @@
 [package]
 name = "mpd_info_screen"
-version = "0.4.8"
+version = "0.4.9"
 edition = "2021"
 description = "Displays info on currently playing music from an MPD daemon"
 license = "MIT"
