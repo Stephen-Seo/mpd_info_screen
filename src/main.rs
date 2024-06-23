@@ -4,6 +4,7 @@ mod mpd_handler;
 #[cfg(feature = "unicode_support")]
 mod unicode_support;
 
+use clap::Parser;
 use ggez::conf::{WindowMode, WindowSetup};
 use ggez::event::winit_event::{ElementState, KeyboardInput, ModifiersState};
 use ggez::event::{self, ControlFlow, EventHandler};
@@ -15,7 +16,6 @@ use std::net::Ipv4Addr;
 use std::path::PathBuf;
 use std::thread;
 use std::time::{Duration, Instant};
-use clap::Parser;
 
 use debug_log::log;
 
@@ -44,11 +44,7 @@ pub struct Opt {
         help = "don't scale-fill the album art to the window"
     )]
     do_not_fill_scale_album_art: bool,
-    #[arg(
-        short = 'l',
-        long = "log-level",
-        default_value = "error",
-    )]
+    #[arg(short = 'l', long = "log-level", default_value = "error")]
     log_level: debug_log::LogLevel,
     #[arg(
         short,
@@ -101,7 +97,7 @@ fn main() -> Result<(), String> {
     let mut modifiers_state: ModifiersState = ModifiersState::default();
 
     event_loop.run(move |mut event, _window_target, control_flow| {
-        if !ctx.continuing {
+        if !ctx.continuing || ctx.quit_requested {
             *control_flow = ControlFlow::Exit;
             return;
         }

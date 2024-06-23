@@ -1,5 +1,5 @@
-use std::fmt::Display;
 use clap::ValueEnum;
+use std::fmt::Display;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum LogState {
