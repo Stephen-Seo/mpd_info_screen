@@ -87,6 +87,7 @@ fn main() -> Result<(), String> {
         })
         .window_mode(WindowMode {
             resizable: true,
+            resize_on_scale_factor_change: true,
             ..Default::default()
         })
         .build()
