@@ -801,6 +801,8 @@ impl EventHandler for MPDDisplay {
             }
         }
 
+        self.prev_mpd_play_state = self.mpd_play_state;
+
         if self.is_valid && self.is_initialized && self.poll_instant.elapsed() > POLL_TIME {
             self.poll_instant = Instant::now();
             if self.dirty_flag.is_some()
@@ -835,10 +837,8 @@ impl EventHandler for MPDDisplay {
                             self.length = 0.0;
                             self.album_art = None;
                         }
-                        self.prev_mpd_play_state = self.mpd_play_state;
                         self.mpd_play_state = shared.mpd_play_state;
                     } else {
-                        self.prev_mpd_play_state = self.mpd_play_state;
                         self.mpd_play_state = MPDPlayState::Playing;
                         if !shared.title.is_empty() {
                             if shared.title != self.title_string_cache {
@@ -937,8 +937,7 @@ impl EventHandler for MPDDisplay {
         self.timer += delta.as_secs_f64();
         let mut timer_diff = seconds_to_time(self.length - self.timer);
         if !self.opts.disable_show_percentage {
-            let timer_percentage = time_to_percentage(self.length, self.timer);
-            timer_diff = timer_diff + " " + &timer_percentage;
+            timer_diff = timer_diff + " " + &time_to_percentage(self.length, self.timer);
         }
         let timer_diff_len = timer_diff.len();
         self.timer_text = Text::new(timer_diff);
@@ -953,7 +952,6 @@ impl EventHandler for MPDDisplay {
             && self.prev_mpd_play_state == MPDPlayState::Playing
         {
             self.update_bg_mesh(ctx)?;
-            self.prev_mpd_play_state = self.mpd_play_state;
         }
 
         Ok(())
