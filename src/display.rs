@@ -55,7 +55,7 @@ fn seconds_to_time(seconds: f64) -> String {
 }
 
 fn time_to_percentage(total: f64, current: f64) -> String {
-    let result = (100.0f64 * current / total).to_string();
+    let result = (100.0f64 * current / total).round().to_string();
     match result.split_once('.') {
         Some((a, _)) => a.to_string() + "%",
         None => result + "%",
