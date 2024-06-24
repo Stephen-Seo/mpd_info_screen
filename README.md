@@ -54,6 +54,8 @@ or through crates.io:
               disable album display
           --disable-show-filename
               disable filename display
+          --disable-show-percentage
+              disable percentage display
           --pprompt
               input password via prompt
           --pfile <PASSWORD_FILE>
