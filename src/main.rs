@@ -35,6 +35,8 @@ pub struct Opt {
     disable_show_album: bool,
     #[arg(long = "disable-show-filename", help = "disable filename display")]
     disable_show_filename: bool,
+    #[arg(long = "disable-show-percentage", help = "disable percentage display")]
+    disable_show_percentage: bool,
     #[arg(long = "pprompt", help = "input password via prompt")]
     enable_prompt_password: bool,
     #[arg(long = "pfile", help = "read password from file")]

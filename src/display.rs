@@ -54,6 +54,14 @@ fn seconds_to_time(seconds: f64) -> String {
     result
 }
 
+fn time_to_percentage(total: f64, current: f64) -> String {
+    let result = (100.0f64 * current / total).to_string();
+    match result.split_once('.') {
+        Some((a, _)) => a.to_string() + "%",
+        None => result + "%",
+    }
+}
+
 #[cfg(not(feature = "unicode_support"))]
 #[allow(clippy::ptr_arg)]
 fn string_to_text(
@@ -227,6 +235,7 @@ pub struct MPDDisplay {
     text_bg_mesh: Option<Mesh>,
     hide_text: bool,
     tried_album_art_in_dir: bool,
+    prev_mpd_play_state: MPDPlayState,
     mpd_play_state: MPDPlayState,
     loaded_fonts: Vec<(PathBuf, String)>,
 }
@@ -267,6 +276,7 @@ impl MPDDisplay {
             text_bg_mesh: None,
             hide_text: false,
             tried_album_art_in_dir: false,
+            prev_mpd_play_state: MPDPlayState::Playing,
             mpd_play_state: MPDPlayState::Playing,
             loaded_fonts: Vec::new(),
             filename_string_cache: String::new(),
@@ -714,21 +724,19 @@ impl MPDDisplay {
                 Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
             )?;
         }
-        let mesh: Mesh = Mesh::from_data(
-            ctx,
-            mesh_builder
-                .rectangle(
-                    DrawMode::fill(),
-                    Rect {
-                        x: TEXT_X_OFFSET,
-                        y: self.cached_timer_y,
-                        w: timer_dimensions.w,
-                        h: timer_dimensions.h,
-                    },
-                    Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
-                )?
-                .build(),
-        );
+        if self.mpd_play_state == MPDPlayState::Playing {
+            mesh_builder.rectangle(
+                DrawMode::fill(),
+                Rect {
+                    x: TEXT_X_OFFSET,
+                    y: self.cached_timer_y,
+                    w: timer_dimensions.w,
+                    h: timer_dimensions.h,
+                },
+                Color::from_rgba(0, 0, 0, self.opts.text_bg_opacity),
+            )?;
+        }
+        let mesh: Mesh = Mesh::from_data(ctx, mesh_builder.build());
 
         self.text_bg_mesh = Some(mesh);
 
@@ -831,8 +839,10 @@ impl EventHandler for MPDDisplay {
                             self.length = 0.0;
                             self.album_art = None;
                         }
+                        self.prev_mpd_play_state = self.mpd_play_state;
                         self.mpd_play_state = shared.mpd_play_state;
                     } else {
+                        self.prev_mpd_play_state = self.mpd_play_state;
                         self.mpd_play_state = MPDPlayState::Playing;
                         if !shared.title.is_empty() {
                             if shared.title != self.title_string_cache {
@@ -929,7 +939,11 @@ impl EventHandler for MPDDisplay {
 
         let delta = ctx.time.delta();
         self.timer += delta.as_secs_f64();
-        let timer_diff = seconds_to_time(self.length - self.timer);
+        let mut timer_diff = seconds_to_time(self.length - self.timer);
+        if !self.opts.disable_show_percentage {
+            let timer_percentage = time_to_percentage(self.length, self.timer);
+            timer_diff = timer_diff + " " + &timer_percentage;
+        }
         let timer_diff_len = timer_diff.len();
         self.timer_text = Text::new(timer_diff);
         self.timer_text.set_scale(PxScale {
@@ -939,6 +953,11 @@ impl EventHandler for MPDDisplay {
         if timer_diff_len != self.timer_text_len {
             self.timer_text_len = timer_diff_len;
             self.update_bg_mesh(ctx)?;
+        } else if self.mpd_play_state != MPDPlayState::Playing
+            && self.prev_mpd_play_state == MPDPlayState::Playing
+        {
+            self.update_bg_mesh(ctx)?;
+            self.prev_mpd_play_state = self.mpd_play_state;
         }
 
         Ok(())
