@@ -810,7 +810,7 @@ impl EventHandler for MPDDisplay {
                     .dirty_flag
                     .as_ref()
                     .unwrap()
-                    .swap(false, Ordering::Relaxed)
+                    .swap(false, Ordering::AcqRel)
             {
                 log(
                     "dirty_flag cleared, acquiring shared data...",
@@ -858,7 +858,7 @@ impl EventHandler for MPDDisplay {
                             self.dirty_flag
                                 .as_ref()
                                 .unwrap()
-                                .store(true, Ordering::Relaxed);
+                                .store(true, Ordering::Release);
                         }
                         if !shared.artist.is_empty() {
                             if shared.artist != self.artist_string_cache {
@@ -873,7 +873,7 @@ impl EventHandler for MPDDisplay {
                             self.dirty_flag
                                 .as_ref()
                                 .unwrap()
-                                .store(true, Ordering::Relaxed);
+                                .store(true, Ordering::Release);
                         }
                         if !shared.album.is_empty() {
                             if shared.album != self.album_string_cache {
@@ -888,7 +888,7 @@ impl EventHandler for MPDDisplay {
                             self.dirty_flag
                                 .as_ref()
                                 .unwrap()
-                                .store(true, Ordering::Relaxed);
+                                .store(true, Ordering::Release);
                         }
                         if !shared.filename.is_empty() {
                             if shared.filename != self.filename_string_cache {
@@ -907,7 +907,7 @@ impl EventHandler for MPDDisplay {
                             self.dirty_flag
                                 .as_ref()
                                 .unwrap()
-                                .store(true, Ordering::Relaxed);
+                                .store(true, Ordering::Release);
                         }
                         self.timer = shared.pos;
                         self.length = shared.length;

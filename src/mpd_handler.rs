@@ -332,7 +332,7 @@ impl MPDHandler {
     #[allow(dead_code)]
     pub fn is_dirty(&self) -> Result<bool, ()> {
         if let Ok(write_lock) = self.state.try_write() {
-            return Ok(write_lock.dirty_flag.swap(false, Ordering::Relaxed));
+            return Ok(write_lock.dirty_flag.swap(false, Ordering::AcqRel));
         }
 
         Err(())
@@ -372,7 +372,7 @@ impl MPDHandler {
 
     pub fn stop_thread(&self) -> Result<(), ()> {
         let read_handle = self.state.try_read().map_err(|_| ())?;
-        read_handle.stop_flag.store(true, Ordering::Relaxed);
+        read_handle.stop_flag.store(true, Ordering::Release);
         Ok(())
     }
 
@@ -441,7 +441,7 @@ impl MPDHandler {
             }
 
             if let Ok(read_handle) = self.state.try_read() {
-                if read_handle.stop_flag.load(Ordering::Relaxed) || !read_handle.can_authenticate {
+                if read_handle.stop_flag.load(Ordering::Acquire) || !read_handle.can_authenticate {
                     break 'main;
                 }
             }
@@ -511,7 +511,7 @@ impl MPDHandler {
                         write_handle.log_level,
                     );
                     if write_handle.art_data.len() == write_handle.art_data_size {
-                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                        write_handle.dirty_flag.store(true, Ordering::Release);
                     }
                 } else {
                     write_handle.art_data.extend_from_slice(&buf_vec);
@@ -526,7 +526,7 @@ impl MPDHandler {
                         write_handle.log_level,
                     );
                     if write_handle.art_data.len() == write_handle.art_data_size {
-                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                        write_handle.dirty_flag.store(true, Ordering::Release);
                     }
                     break 'handle_buf;
                 }
@@ -561,7 +561,7 @@ impl MPDHandler {
                         PollState::ReadPicture => {
                             if write_handle.art_data.is_empty() {
                                 write_handle.can_get_album_art = false;
-                                write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                                write_handle.dirty_flag.store(true, Ordering::Release);
                                 log(
                                     "No embedded album art",
                                     LogState::Warning,
@@ -572,7 +572,7 @@ impl MPDHandler {
                         PollState::ReadPictureInDir => {
                             if write_handle.art_data.is_empty() {
                                 write_handle.can_get_album_art_in_dir = false;
-                                write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                                write_handle.dirty_flag.store(true, Ordering::Release);
                                 log(
                                     "No album art in dir",
                                     LogState::Warning,
@@ -589,13 +589,13 @@ impl MPDHandler {
                     match write_handle.poll_state {
                         PollState::Password => {
                             write_handle.can_authenticate = false;
-                            write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                            write_handle.dirty_flag.store(true, Ordering::Release);
                             write_handle.error_text = "Failed to authenticate to MPD".into();
-                            write_handle.stop_flag.store(true, Ordering::Relaxed);
+                            write_handle.stop_flag.store(true, Ordering::Release);
                         }
                         PollState::CurrentSong | PollState::Status => {
                             write_handle.can_get_status = false;
-                            write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                            write_handle.dirty_flag.store(true, Ordering::Release);
                             write_handle.error_text = "Failed to get MPD status".into();
                             if line.contains("don't have permission") {
                                 write_handle.can_authenticate = false;
@@ -604,7 +604,7 @@ impl MPDHandler {
                         }
                         PollState::ReadPicture => {
                             write_handle.can_get_album_art = false;
-                            write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                            write_handle.dirty_flag.store(true, Ordering::Release);
                             log(
                                 "Failed to get readpicture",
                                 LogState::Warning,
@@ -615,7 +615,7 @@ impl MPDHandler {
                         }
                         PollState::ReadPictureInDir => {
                             write_handle.can_get_album_art_in_dir = false;
-                            write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                            write_handle.dirty_flag.store(true, Ordering::Release);
                             log(
                                 "Failed to get albumart",
                                 LogState::Warning,
@@ -677,13 +677,13 @@ impl MPDHandler {
                         write_handle.force_get_status = true;
                         write_handle.error_text.clear();
                     }
-                    write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                    write_handle.dirty_flag.store(true, Ordering::Release);
                     write_handle.song_title_get_time = Instant::now();
                 } else if line.starts_with("elapsed: ") {
                     let parse_pos_result = f64::from_str(&line.split_off(9));
                     if let Ok(value) = parse_pos_result {
                         write_handle.current_song_position = value;
-                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                        write_handle.dirty_flag.store(true, Ordering::Release);
                         write_handle.song_pos_get_time = Instant::now();
                     } else {
                         log(
@@ -696,7 +696,7 @@ impl MPDHandler {
                     let parse_pos_result = f64::from_str(&line.split_off(10));
                     if let Ok(value) = parse_pos_result {
                         write_handle.current_song_length = value;
-                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                        write_handle.dirty_flag.store(true, Ordering::Release);
                         write_handle.song_length_get_time = Instant::now();
                     } else {
                         log(
@@ -709,7 +709,7 @@ impl MPDHandler {
                     let parse_artsize_result = usize::from_str(&line.split_off(6));
                     if let Ok(value) = parse_artsize_result {
                         write_handle.art_data_size = value;
-                        write_handle.dirty_flag.store(true, Ordering::Relaxed);
+                        write_handle.dirty_flag.store(true, Ordering::Release);
                     } else {
                         log(
                             "Failed to parse album art byte size",
@@ -762,7 +762,7 @@ impl MPDHandler {
         } // 'handle_buf: loop
 
         if got_mpd_state != write_handle.mpd_play_state {
-            write_handle.dirty_flag.store(true, Ordering::Relaxed);
+            write_handle.dirty_flag.store(true, Ordering::Release);
             if got_mpd_state == MPDPlayState::Playing {
                 write_handle.error_text.clear();
             }
