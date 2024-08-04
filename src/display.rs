@@ -9,7 +9,7 @@ use ggez::graphics::{
 use ggez::input::keyboard::{self, KeyInput};
 use ggez::mint::Vector2;
 use ggez::{Context, GameError, GameResult};
-use image::io::Reader as ImageReader;
+use image::ImageReader;
 use image::DynamicImage;
 use std::io::Cursor;
 use std::path::PathBuf;
@@ -457,7 +457,7 @@ impl MPDDisplay {
         let ggez_img = Image::from_pixels(
             ctx,
             rgba8.as_raw(),
-            wgpu::TextureFormat::Rgba8UnormSrgb,
+            wgpu_types::TextureFormat::Rgba8UnormSrgb,
             rgba8.width(),
             rgba8.height(),
         );
