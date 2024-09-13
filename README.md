@@ -56,6 +56,8 @@ or through crates.io:
               disable filename display
           --disable-show-percentage
               disable percentage display
+          --force-text-height-scale <FORCE_TEXT_HEIGHT_SCALE>
+              force-set text height relative to window height as a ratio (default 0.12)
           --pprompt
               input password via prompt
           --pfile <PASSWORD_FILE>
