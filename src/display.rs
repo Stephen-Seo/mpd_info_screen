@@ -9,8 +9,8 @@ use ggez::graphics::{
 use ggez::input::keyboard::{self, KeyInput};
 use ggez::mint::Vector2;
 use ggez::{Context, GameError, GameResult};
-use image::ImageReader;
 use image::DynamicImage;
+use image::ImageReader;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
