@@ -19,14 +19,16 @@ use std::thread;
 use std::time::{Duration, Instant};
 
 const POLL_TIME: Duration = Duration::from_millis(333);
+const INIT_FONT_SIZE_RATIO: f32 = 1.4167;
 const INIT_FONT_SIZE_X: f32 = 36.0;
-const INIT_FONT_SIZE_Y: f32 = 51.0;
+const INIT_FONT_SIZE_Y: f32 = INIT_FONT_SIZE_X * INIT_FONT_SIZE_RATIO;
 const TEXT_X_OFFSET: f32 = 0.3;
 const TEXT_OFFSET_Y_SPACING: f32 = 0.4;
 const TEXT_HEIGHT_SCALE: f32 = 0.12;
 const ARTIST_HEIGHT_SCALE: f32 = 0.12;
 const ALBUM_HEIGHT_SCALE: f32 = 0.12;
-const TIMER_HEIGHT_SCALE: f32 = 0.105;
+const TIMER_HEIGHT_SCALE_RATIO: f32 = 0.875;
+const TIMER_HEIGHT_SCALE: f32 = TEXT_HEIGHT_SCALE * TIMER_HEIGHT_SCALE_RATIO;
 const MIN_WIDTH_RATIO: f32 = 4.0 / 5.0;
 const INCREASE_AMT: f32 = 6.0 / 5.0;
 const DECREASE_AMT: f32 = 5.0 / 6.0;
@@ -470,10 +472,27 @@ impl MPDDisplay {
     fn refresh_text_transforms(&mut self, ctx: &mut Context) -> GameResult<()> {
         let drawable_size = ctx.gfx.drawable_size();
 
-        let text_height_limit = TEXT_HEIGHT_SCALE * drawable_size.1.abs();
-        let album_height_limit = ALBUM_HEIGHT_SCALE * drawable_size.1.abs();
-        let artist_height_limit = ARTIST_HEIGHT_SCALE * drawable_size.1.abs();
-        let timer_height = TIMER_HEIGHT_SCALE * drawable_size.1.abs();
+        let text_height_scale: f32;
+        let album_height_scale: f32;
+        let artist_height_scale: f32;
+        let timer_height_scale: f32;
+
+        if let Some(forced_scale) = &self.opts.force_text_height_scale {
+            text_height_scale = *forced_scale;
+            album_height_scale = *forced_scale;
+            artist_height_scale = *forced_scale;
+            timer_height_scale = *forced_scale * TIMER_HEIGHT_SCALE_RATIO;
+        } else {
+            text_height_scale = TEXT_HEIGHT_SCALE;
+            album_height_scale = ALBUM_HEIGHT_SCALE;
+            artist_height_scale = ARTIST_HEIGHT_SCALE;
+            timer_height_scale = TIMER_HEIGHT_SCALE;
+        }
+
+        let text_height_limit = text_height_scale * drawable_size.1.abs();
+        let album_height_limit = album_height_scale * drawable_size.1.abs();
+        let artist_height_limit = artist_height_scale * drawable_size.1.abs();
+        let timer_height = timer_height_scale * drawable_size.1.abs();
 
         let mut offset_y: f32 = drawable_size.1;
 

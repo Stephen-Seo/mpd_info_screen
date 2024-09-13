@@ -37,6 +37,11 @@ pub struct Opt {
     disable_show_filename: bool,
     #[arg(long = "disable-show-percentage", help = "disable percentage display")]
     disable_show_percentage: bool,
+    #[arg(
+        long = "force-text-height-scale",
+        help = "force-set text height relative to window height as a ratio (default 0.12)"
+    )]
+    force_text_height_scale: Option<f32>,
     #[arg(long = "pprompt", help = "input password via prompt")]
     enable_prompt_password: bool,
     #[arg(long = "pfile", help = "read password from file")]
@@ -59,6 +64,15 @@ pub struct Opt {
 
 fn main() -> Result<(), String> {
     let mut opt = Opt::parse();
+    if let Some(forced_scale) = &mut opt.force_text_height_scale {
+        if *forced_scale < 0.01 {
+            *forced_scale = 0.01;
+            println!("WARNING: Clamped \"force-text-height-scale\" to minimum of 0.01!");
+        } else if *forced_scale > 0.5 {
+            *forced_scale = 0.5;
+            println!("WARNING: Clamped \"force-text-height-scale\" to maximum of 0.5!");
+        }
+    }
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
 
     // Read password from file if exists, error otherwise.
