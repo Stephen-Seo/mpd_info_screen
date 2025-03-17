@@ -759,7 +759,7 @@ impl MPDDisplay {
     }
 
     pub fn is_authenticated(&self) -> bool {
-        self.is_authenticated
+        self.password_entered && self.is_authenticated
     }
 
     pub fn get_is_mpd_handler_stopped(&self) -> Result<bool, String> {
