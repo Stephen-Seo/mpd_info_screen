@@ -15,6 +15,7 @@ const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const STREAM_TIMEOUT: Duration = Duration::from_secs(5);
 const STREAM_TIMEOUT_CHECK: Duration = Duration::from_millis(4500);
 const RESTART_ZERO_BYTES_COUNT: u32 = 30;
+const PRE_RESTART_WAIT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum PollState {
@@ -243,6 +244,7 @@ fn read_line(
 }
 
 fn restart_stream(state_handle: &mut RwLockWriteGuard<'_, MPDHandlerState>) -> Result<(), String> {
+    thread::sleep(PRE_RESTART_WAIT);
     let peer = state_handle
         .stream
         .peer_addr()
@@ -557,6 +559,7 @@ impl MPDHandler {
             if read_amount_result == 0 {
                 write_handle.recv_zero_bytes_count += 1;
                 if write_handle.recv_zero_bytes_count > RESTART_ZERO_BYTES_COUNT {
+                    write_handle.recv_zero_bytes_count = 0;
                     log(
                         "Too many recv-zero-bytes, restarting connection...",
                         LogState::Warning,
