@@ -75,6 +75,8 @@ fn main() -> Result<(), String> {
     }
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
 
+    let password_opted = opt.password_file.is_some() || opt.enable_prompt_password;
+
     // Read password from file if exists, error otherwise.
     if let Some(psswd_file_path) = opt.password_file.as_ref() {
         let mut file = File::open(psswd_file_path).expect("pfile/password_file should exist");
@@ -115,7 +117,8 @@ fn main() -> Result<(), String> {
     event_loop.run(move |mut event, _window_target, control_flow| {
         if !ctx.continuing
             || ctx.quit_requested
-            || (display.is_authenticated() && display.get_is_mpd_handler_stopped().unwrap_or(false))
+            || ((!password_opted || display.is_authenticated())
+                && display.get_is_mpd_handler_stopped().unwrap_or(false))
         {
             *control_flow = ControlFlow::Exit;
             return;
