@@ -113,7 +113,10 @@ fn main() -> Result<(), String> {
     let mut modifiers_state: ModifiersState = ModifiersState::default();
 
     event_loop.run(move |mut event, _window_target, control_flow| {
-        if !ctx.continuing || ctx.quit_requested {
+        if !ctx.continuing
+            || ctx.quit_requested
+            || (display.is_authenticated() && display.get_is_mpd_handler_stopped().unwrap_or(false))
+        {
             *control_flow = ControlFlow::Exit;
             return;
         }
