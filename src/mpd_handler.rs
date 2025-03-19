@@ -4,13 +4,16 @@ use std::io::{self, Read, Write as IOWrite};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
 use std::str::FromStr;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard};
+use std::sync::{Arc, Mutex, RwLock, RwLockReadGuard, RwLockWriteGuard};
 use std::thread;
 use std::time::{Duration, Instant};
 
 const SLEEP_DURATION: Duration = Duration::from_millis(100);
 const POLL_DURATION: Duration = Duration::from_secs(5);
 const BUF_SIZE: usize = 1024 * 4;
+const CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+const RESTART_ZERO_BYTES_COUNT: u32 = 30;
+const PRE_RESTART_WAIT: Duration = Duration::from_secs(2);
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone)]
 enum PollState {
@@ -80,6 +83,7 @@ pub struct MPDHandlerState {
     pub stop_flag: Arc<AtomicBool>,
     log_level: LogLevel,
     mpd_play_state: MPDPlayState,
+    recv_zero_bytes_count: u32,
 }
 
 fn check_next_chars(
@@ -237,6 +241,45 @@ fn read_line(
     Err((String::from("Newline not reached"), result))
 }
 
+fn restart_stream_impl(
+    state_handle: &mut RwLockWriteGuard<'_, MPDHandlerState>,
+) -> Result<(), String> {
+    let peer = state_handle
+        .stream
+        .peer_addr()
+        .map_err(|_| String::from("Failed to get TCP stream peer addr/port"))?;
+    state_handle
+        .stream
+        .shutdown(std::net::Shutdown::Both)
+        .map_err(|_| String::from("Failed to cleanup TCP stream"))?;
+    state_handle.stream = TcpStream::connect_timeout(&peer, CONNECT_TIMEOUT)
+        .map_err(|_| String::from("Failed to reconnect"))?;
+    state_handle
+        .stream
+        .set_nonblocking(true)
+        .map_err(|_| String::from("Failed to set non-blocking on restarted TCP stream"))?;
+    Ok(())
+}
+
+fn restart_stream(
+    state_handle: &mut RwLockWriteGuard<'_, MPDHandlerState>,
+    log_level: LogLevel,
+) -> Result<(), String> {
+    thread::sleep(PRE_RESTART_WAIT);
+    let result = restart_stream_impl(state_handle);
+    if let Err(e) = result {
+        log("Failed to reconnect.", LogState::Error, LogLevel::Error);
+        state_handle.stop_flag.store(true, Ordering::Release);
+        Err(e)
+    } else {
+        log("Connection restarted.", LogState::Warning, log_level);
+        state_handle.is_authenticated = false;
+        state_handle.can_authenticate = true;
+        state_handle.recv_zero_bytes_count = 0;
+        Ok(())
+    }
+}
+
 impl MPDHandler {
     pub fn new(
         host: Ipv4Addr,
@@ -244,11 +287,9 @@ impl MPDHandler {
         password: String,
         log_level: LogLevel,
     ) -> Result<Self, String> {
-        let stream = TcpStream::connect_timeout(
-            &SocketAddr::new(IpAddr::V4(host), port),
-            Duration::from_secs(5),
-        )
-        .map_err(|_| String::from("Failed to get TCP connection (is MPD running?)"))?;
+        let stream =
+            TcpStream::connect_timeout(&SocketAddr::new(IpAddr::V4(host), port), CONNECT_TIMEOUT)
+                .map_err(|_| String::from("Failed to get TCP connection (is MPD running?)"))?;
 
         let password_is_empty = password.is_empty();
 
@@ -285,6 +326,7 @@ impl MPDHandler {
                 log_level,
                 mpd_play_state: MPDPlayState::Stopped,
                 current_song_album: String::new(),
+                recv_zero_bytes_count: 0,
             })),
         };
 
@@ -485,9 +527,22 @@ impl MPDHandler {
             }
         } else if let Ok(read_amount_result) = read_result {
             if read_amount_result == 0 {
+                write_handle.recv_zero_bytes_count += 1;
+                if write_handle.recv_zero_bytes_count > RESTART_ZERO_BYTES_COUNT {
+                    write_handle.recv_zero_bytes_count = 0;
+                    let log_level = write_handle.log_level;
+                    log(
+                        "Too many recv-zero-bytes, restarting connection...",
+                        LogState::Warning,
+                        log_level,
+                    );
+                    return restart_stream(&mut write_handle, log_level);
+                }
                 return Err(String::from("Got zero bytes from TCP stream"));
+            } else {
+                write_handle.recv_zero_bytes_count = 0;
+                read_amount = read_amount_result;
             }
-            read_amount = read_amount_result;
         }
         let mut buf_vec: Vec<u8> = Vec::from(&buf[0..read_amount]);
 

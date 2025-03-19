@@ -757,6 +757,20 @@ impl MPDDisplay {
 
         Ok(())
     }
+
+    pub fn is_authenticated(&self) -> bool {
+        self.is_authenticated
+    }
+
+    pub fn get_is_mpd_handler_stopped(&self) -> Result<bool, String> {
+        Ok(self
+            .mpd_handler
+            .as_ref()?
+            .get_state_read_guard()
+            .map_err(|_| String::from("Failed to get inner MPDHandler state"))?
+            .stop_flag
+            .load(Ordering::Acquire))
+    }
 }
 
 impl EventHandler for MPDDisplay {
