@@ -241,32 +241,31 @@ fn read_line(
     Err((String::from("Newline not reached"), result))
 }
 
-fn restart_stream_impl(
-    state_handle: &mut RwLockWriteGuard<'_, MPDHandlerState>,
-) -> Result<(), String> {
-    let peer = state_handle
-        .stream
-        .peer_addr()
-        .map_err(|_| String::from("Failed to get TCP stream peer addr/port"))?;
-    state_handle
-        .stream
-        .shutdown(std::net::Shutdown::Both)
-        .map_err(|_| String::from("Failed to cleanup TCP stream"))?;
-    state_handle.stream = TcpStream::connect_timeout(&peer, CONNECT_TIMEOUT)
-        .map_err(|_| String::from("Failed to reconnect"))?;
-    state_handle
-        .stream
-        .set_nonblocking(true)
-        .map_err(|_| String::from("Failed to set non-blocking on restarted TCP stream"))?;
-    Ok(())
-}
-
 fn restart_stream(
     state_handle: &mut RwLockWriteGuard<'_, MPDHandlerState>,
     log_level: LogLevel,
 ) -> Result<(), String> {
     thread::sleep(PRE_RESTART_WAIT);
-    let result = restart_stream_impl(state_handle);
+
+    let fn_impl = |state_handle: &mut RwLockWriteGuard<'_, MPDHandlerState>| -> Result<(), String> {
+        let peer = state_handle
+            .stream
+            .peer_addr()
+            .map_err(|_| String::from("Failed to get TCP stream peer addr/port"))?;
+        state_handle
+            .stream
+            .shutdown(std::net::Shutdown::Both)
+            .map_err(|_| String::from("Failed to cleanup TCP stream"))?;
+        state_handle.stream = TcpStream::connect_timeout(&peer, CONNECT_TIMEOUT)
+            .map_err(|_| String::from("Failed to reconnect"))?;
+        state_handle
+            .stream
+            .set_nonblocking(true)
+            .map_err(|_| String::from("Failed to set non-blocking on restarted TCP stream"))?;
+        Ok(())
+    };
+
+    let result = fn_impl(state_handle);
     if let Err(e) = result {
         log("Failed to reconnect.", LogState::Error, LogLevel::Error);
         state_handle.stop_flag.store(true, Ordering::Release);

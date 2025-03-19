@@ -869,6 +869,10 @@ impl EventHandler for MPDDisplay {
                             self.timer = 0.0;
                             self.length = 0.0;
                             self.album_art = None;
+                            self.filename_string_cache.clear();
+                            self.artist_string_cache.clear();
+                            self.title_string_cache.clear();
+                            self.album_string_cache.clear();
                         }
                         self.mpd_play_state = shared.mpd_play_state;
                     } else {
