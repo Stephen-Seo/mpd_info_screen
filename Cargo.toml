@@ -14,7 +14,7 @@ clap = { version = "4.5", features = ["derive"] }
 image = "0.25"
 ggez = "0.9.3"
 freetype = { version = "0.7", optional = true }
-wgpu-types = "0.16"
+wgpu-types = "23.0"
 
 [build-dependencies]
 bindgen = { version = "0.70", optional = true }
