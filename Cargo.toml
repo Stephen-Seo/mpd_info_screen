@@ -17,7 +17,7 @@ freetype = { version = "0.7", optional = true }
 wgpu-types = "0.16"
 
 [build-dependencies]
-bindgen = { version = "0.70", optional = true }
+bindgen = { version = "0.72", optional = true }
 
 [features]
 unicode_support = ["dep:freetype", "dep:bindgen"]
