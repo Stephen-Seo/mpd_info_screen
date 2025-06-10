@@ -278,12 +278,30 @@ dependencies = [
  "cexpr",
  "clang-sys",
  "itertools 0.13.0",
+ "proc-macro2",
+ "quote",
+ "regex",
+ "rustc-hash 1.1.0",
+ "shlex",
+ "syn 2.0.101",
+]
+
+[[package]]
+name = "bindgen"
+version = "0.72.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4f72209734318d0b619a5e0f5129918b848c416e122a3c4ce054e03cb87b726f"
+dependencies = [
+ "bitflags 2.9.1",
+ "cexpr",
+ "clang-sys",
+ "itertools 0.13.0",
  "log",
  "prettyplease",
  "proc-macro2",
  "quote",
  "regex",
- "rustc-hash 1.1.0",
+ "rustc-hash 2.1.1",
  "shlex",
  "syn 2.0.101",
 ]
@@ -679,7 +697,7 @@ version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2ce857aa0b77d77287acc1ac3e37a05a8c95a2af3647d23b15f263bdaeb7562b"
 dependencies = [
- "bindgen",
+ "bindgen 0.70.1",
 ]
 
 [[package]]
@@ -1764,7 +1782,7 @@ dependencies = [
 name = "mpd_info_screen"
 version = "0.5.2"
 dependencies = [
- "bindgen",
+ "bindgen 0.72.0",
  "clap",
  "freetype",
  "ggez",
