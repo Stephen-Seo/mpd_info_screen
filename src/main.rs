@@ -1,6 +1,7 @@
 mod debug_log;
 mod display;
 mod mpd_handler;
+mod signal;
 #[cfg(feature = "unicode_support")]
 mod unicode_support;
 
@@ -94,6 +95,16 @@ fn main() -> Result<(), String> {
         opt.password = Some(content);
     }
 
+    // Set up signal handlers to request graceful shutdown.
+    #[cfg(target_family = "unix")]
+    {
+        signal::register_signal(libc::SIGHUP).unwrap();
+        signal::register_signal(libc::SIGINT).unwrap();
+        signal::register_signal(libc::SIGTERM).unwrap();
+    }
+    #[cfg(target_family = "windows")]
+    {}
+
     let (mut ctx, event_loop) = ContextBuilder::new("mpd_info_screen", "Stephen Seo")
         .window_setup(WindowSetup {
             title: "mpd info screen".into(),
@@ -114,14 +125,20 @@ fn main() -> Result<(), String> {
 
     let mut modifiers_state: ModifiersState = ModifiersState::default();
 
+    let mut close_request_handled = false;
+
     event_loop.run(move |mut event, _window_target, control_flow| {
         if !ctx.continuing
             || ctx.quit_requested
             || ((!password_opted || display.is_authenticated())
                 && display.get_is_mpd_handler_stopped().unwrap_or(false))
+            || signal::TO_CLOSE_REQUESTED.load(std::sync::atomic::Ordering::Relaxed)
         {
-            *control_flow = ControlFlow::Exit;
-            return;
+            if !close_request_handled {
+                *control_flow = ControlFlow::Exit;
+                close_request_handled = true;
+                return;
+            }
         }
 
         *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(100));
@@ -198,6 +215,9 @@ fn main() -> Result<(), String> {
                 // sleep to force ~5 fps
                 thread::sleep(Duration::from_millis(200));
                 ggez::timer::yield_now();
+            }
+            event::winit_event::Event::LoopDestroyed => {
+                eprintln!("End of mpd_info_screen main loop.")
             }
             x => log(
                 format!("Device event fired: {x:?}"),
