@@ -1880,6 +1880,7 @@ dependencies = [
  "freetype",
  "ggez",
  "image 0.25.9",
+ "libc",
  "wgpu-types",
 ]
 

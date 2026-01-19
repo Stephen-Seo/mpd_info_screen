@@ -16,8 +16,17 @@ ggez = "0.9.3"
 freetype = { version = "0.7", optional = true }
 wgpu-types = "0.16"
 
+#[target.'cfg(windows)'.dependencies]
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2"
+
 [build-dependencies]
 bindgen = { version = "0.72", optional = true }
 
 [features]
 unicode_support = ["dep:freetype", "dep:bindgen"]
+
+[profile.release-with-debug]
+inherits = "release"
+debug = true
