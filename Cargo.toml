@@ -16,7 +16,8 @@ ggez = "0.10"
 freetype = { version = "0.8", optional = true }
 wgpu-types = "29.0.1"
 
-#[target.'cfg(windows)'.dependencies]
+[target.'cfg(windows)'.dependencies]
+windows-sys = "0.61"
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2"
