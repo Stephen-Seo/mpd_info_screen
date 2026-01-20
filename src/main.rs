@@ -103,7 +103,9 @@ fn main() -> Result<(), String> {
         signal::register_signal(libc::SIGTERM).unwrap();
     }
     #[cfg(target_family = "windows")]
-    {}
+    {
+        signal::register_ctrl_handler().unwrap();
+    }
 
     let (mut ctx, event_loop) = ContextBuilder::new("mpd_info_screen", "Stephen Seo")
         .window_setup(WindowSetup {

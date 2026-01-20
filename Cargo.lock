@@ -1882,6 +1882,7 @@ dependencies = [
  "image 0.25.9",
  "libc",
  "wgpu-types",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
