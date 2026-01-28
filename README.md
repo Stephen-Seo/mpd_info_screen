@@ -12,6 +12,16 @@ A Rust program that displays info about the currently running MPD server.
 The window shows albumart (may be embedded in the audio file, or is a "cover.jpg" in the same directory as the song file), a "time-remaining"
 counter, and the filename currently being played
 
+## mpd\_info\_screen2
+
+mpd\_info\_screen has been rewritten in C++ using Raylib instead of ggez. You can find it here:
+
+[github](https://github.com/Stephen-Seo/mpd_info_screen2)
+
+[git.seodisparate.com](https://git.seodisparate.com/gitweb/?p=mpd_info_screen2;a=summary)
+
+For now, both programs will be maintained.
+
 ## Known Bugs ❗❗
 
 Currently there are no known bugs. Please report any bugs you find to the
