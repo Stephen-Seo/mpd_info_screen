@@ -1,4 +1,4 @@
-use crate::debug_log::{log, LogLevel, LogState};
+use crate::debug_log::{LogLevel, LogState, log};
 use std::fmt::Write;
 use std::io::{self, Read, Write as IOWrite};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpStream};
@@ -454,16 +454,16 @@ impl MPDHandler {
                 && !self.failed_to_authenticate().unwrap_or(false)
             {
                 thread::sleep(SLEEP_DURATION);
-                if let Ok(write_handle) = self.state.try_write() {
-                    if write_handle.self_thread.is_none() {
-                        // main thread failed to store handle to this thread
-                        log(
-                            "MPDHandle thread stopping due to failed handle storage",
-                            LogState::Error,
-                            write_handle.log_level,
-                        );
-                        break 'main;
-                    }
+                if let Ok(write_handle) = self.state.try_write()
+                    && write_handle.self_thread.is_none()
+                {
+                    // main thread failed to store handle to this thread
+                    log(
+                        "MPDHandle thread stopping due to failed handle storage",
+                        LogState::Error,
+                        write_handle.log_level,
+                    );
+                    break 'main;
                 }
             }
 
@@ -481,10 +481,10 @@ impl MPDHandler {
                 );
             }
 
-            if let Ok(read_handle) = self.state.try_read() {
-                if read_handle.stop_flag.load(Ordering::Acquire) || !read_handle.can_authenticate {
-                    break 'main;
-                }
+            if let Ok(read_handle) = self.state.try_read()
+                && (read_handle.stop_flag.load(Ordering::Acquire) || !read_handle.can_authenticate)
+            {
+                break 'main;
             }
 
             io::stdout().flush().unwrap();
@@ -623,16 +623,14 @@ impl MPDHandler {
                                 );
                             }
                         }
-                        PollState::ReadPictureInDir => {
-                            if write_handle.art_data.is_empty() {
-                                write_handle.can_get_album_art_in_dir = false;
-                                write_handle.dirty_flag.store(true, Ordering::Release);
-                                log(
-                                    "No album art in dir",
-                                    LogState::Warning,
-                                    write_handle.log_level,
-                                );
-                            }
+                        PollState::ReadPictureInDir if write_handle.art_data.is_empty() => {
+                            write_handle.can_get_album_art_in_dir = false;
+                            write_handle.dirty_flag.store(true, Ordering::Release);
+                            log(
+                                "No album art in dir",
+                                LogState::Warning,
+                                write_handle.log_level,
+                            );
                         }
                         _ => (),
                     }

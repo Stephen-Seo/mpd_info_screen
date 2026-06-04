@@ -1,6 +1,6 @@
+use crate::Opt;
 use crate::debug_log::{self, log};
 use crate::mpd_handler::{InfoFromShared, MPDHandler, MPDHandlerState, MPDPlayState};
-use crate::Opt;
 use ggez::event::EventHandler;
 use ggez::graphics::{
     self, Color, DrawMode, DrawParam, Drawable, Image, Mesh, MeshBuilder, PxScale, Rect, Text,
@@ -8,13 +8,14 @@ use ggez::graphics::{
 };
 use ggez::input::keyboard::{self, KeyInput};
 use ggez::mint::Vector2;
+use ggez::winit::keyboard::PhysicalKey;
 use ggez::{Context, GameError, GameResult};
 use image::DynamicImage;
 use image::ImageReader;
 use std::io::Cursor;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use std::sync::{atomic::Ordering, Arc, RwLockReadGuard};
+use std::sync::{Arc, RwLockReadGuard, atomic::Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -32,6 +33,7 @@ const TIMER_HEIGHT_SCALE: f32 = TEXT_HEIGHT_SCALE * TIMER_HEIGHT_SCALE_RATIO;
 const MIN_WIDTH_RATIO: f32 = 4.0 / 5.0;
 const INCREASE_AMT: f32 = 6.0 / 5.0;
 const DECREASE_AMT: f32 = 5.0 / 6.0;
+const RESIZE_TICKS_MAX: u32 = 200;
 
 fn seconds_to_time(seconds: f64) -> String {
     let seconds_int: u64 = seconds.floor() as u64;
@@ -236,6 +238,8 @@ pub struct MPDDisplay {
     prev_mpd_play_state: MPDPlayState,
     mpd_play_state: MPDPlayState,
     loaded_fonts: Vec<(PathBuf, String)>,
+    close_request_handled: bool,
+    resize_ticks: u32,
 }
 
 impl MPDDisplay {
@@ -283,6 +287,8 @@ impl MPDDisplay {
             album_text: Text::default(),
             album_string_cache: String::new(),
             album_transform: Transform::default(),
+            close_request_handled: false,
+            resize_ticks: 0,
         }
     }
 
@@ -293,10 +299,10 @@ impl MPDDisplay {
             self.opts.password.clone().map_or(String::new(), |s| s),
             self.opts.log_level,
         );
-        if self.mpd_handler.is_ok() {
+        if let Ok(mpd_h) = &self.mpd_handler {
             self.is_initialized = true;
             loop {
-                self.dirty_flag = self.mpd_handler.as_ref().unwrap().get_dirty_flag().ok();
+                self.dirty_flag = mpd_h.get_dirty_flag().ok();
                 if self.dirty_flag.is_some() {
                     break;
                 } else {
@@ -322,7 +328,7 @@ impl MPDDisplay {
         if fill_scaled {
             if let Some(image) = &self.album_art {
                 let drawable_size = ctx.gfx.drawable_size();
-                let art_rect: Rect = image.dimensions(ctx).expect("Image should have dimensions");
+                let art_rect: Rect = image.dimensions(ctx);
 
                 // try to fit to width first
                 let mut x_scale = drawable_size.0 / art_rect.w;
@@ -351,7 +357,7 @@ impl MPDDisplay {
             }
         } else if let Some(image) = &self.album_art {
             let drawable_size = ctx.gfx.drawable_size();
-            let art_rect: Rect = image.dimensions(ctx).expect("Image should have dimensions");
+            let art_rect: Rect = image.dimensions(ctx);
             let offset_x: f32 = (drawable_size.0.abs() - art_rect.w.abs()) / 2.0f32;
             let offset_y: f32 = (drawable_size.1.abs() - art_rect.h.abs()) / 2.0f32;
             self.album_art_draw_transform = Some(Transform::Values {
@@ -372,11 +378,14 @@ impl MPDDisplay {
             .unwrap()
             .get_state_read_guard()
             .ok();
-        if read_guard_opt.is_none() {
+        if let Some(read_guard) = &read_guard_opt {
+            if !read_guard.is_art_data_ready() {
+                return Err(String::from("MPDHandlerState does not have album art data"));
+            }
+        } else {
             return Err(String::from("Failed to get read_guard of MPDHandlerState"));
-        } else if !read_guard_opt.as_ref().unwrap().is_art_data_ready() {
-            return Err(String::from("MPDHandlerState does not have album art data"));
         }
+
         let image_ref = read_guard_opt.as_ref().unwrap().get_art_data();
 
         let mut image_format: image::ImageFormat = image::ImageFormat::Png;
@@ -669,26 +678,11 @@ impl MPDDisplay {
     }
 
     fn update_bg_mesh(&mut self, ctx: &mut Context) -> GameResult<()> {
-        let filename_dimensions = self
-            .filename_text
-            .dimensions(ctx)
-            .expect("Should be able to get dimensions of Text.");
-        let album_dimensions = self
-            .album_text
-            .dimensions(ctx)
-            .expect("Should be able to get dimensions of Text.");
-        let artist_dimensions = self
-            .artist_text
-            .dimensions(ctx)
-            .expect("Should be able to get dimensions of Text.");
-        let title_dimensions = self
-            .title_text
-            .dimensions(ctx)
-            .expect("Should be able to get dimensions of Text.");
-        let timer_dimensions = self
-            .timer_text
-            .dimensions(ctx)
-            .expect("Should be able to get dimensions of Text.");
+        let filename_dimensions = self.filename_text.dimensions(ctx);
+        let album_dimensions = self.album_text.dimensions(ctx);
+        let artist_dimensions = self.artist_text.dimensions(ctx);
+        let title_dimensions = self.title_text.dimensions(ctx);
+        let timer_dimensions = self.timer_text.dimensions(ctx);
 
         let mut mesh_builder: MeshBuilder = MeshBuilder::new();
         if !self.opts.disable_show_filename {
@@ -758,10 +752,12 @@ impl MPDDisplay {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn is_authenticated(&self) -> bool {
         self.is_authenticated
     }
 
+    #[allow(dead_code)]
     pub fn get_is_mpd_handler_stopped(&self) -> Result<bool, String> {
         Ok(self
             .mpd_handler
@@ -777,11 +773,11 @@ impl EventHandler for MPDDisplay {
     fn update(&mut self, ctx: &mut ggez::Context) -> Result<(), GameError> {
         if !self.is_valid {
             if let Err(mpd_handler_error) = &self.mpd_handler {
-                return Err(GameError::EventLoopError(format!(
+                return Err(GameError::CustomError(format!(
                     "Failed to initialize MPDHandler: {mpd_handler_error}"
                 )));
             } else {
-                return Err(GameError::EventLoopError(
+                return Err(GameError::CustomError(
                     "Failed to initialize MPDHandler".into(),
                 ));
             }
@@ -832,6 +828,15 @@ impl EventHandler for MPDDisplay {
                     }
                 }
             }
+        }
+
+        if (!ctx.fields.continuing
+            || ctx.fields.quit_requested
+            || crate::signal::TO_CLOSE_REQUESTED.load(std::sync::atomic::Ordering::Relaxed))
+            && !self.close_request_handled
+        {
+            ctx.request_quit();
+            self.close_request_handled = true;
         }
 
         self.prev_mpd_play_state = self.mpd_play_state;
@@ -991,6 +996,14 @@ impl EventHandler for MPDDisplay {
             self.update_bg_mesh(ctx)?;
         }
 
+        if self.resize_ticks < RESIZE_TICKS_MAX {
+            self.resize_ticks += 1;
+        } else {
+            // sleep to force ~5 fps
+            thread::sleep(Duration::from_millis(200));
+            ggez::timer::yield_now();
+        }
+
         Ok(())
     }
 
@@ -998,13 +1011,13 @@ impl EventHandler for MPDDisplay {
         let mut canvas = graphics::Canvas::from_frame(ctx, Color::BLACK);
 
         if self.mpd_play_state != MPDPlayState::Stopped
-            && self.album_art.is_some()
-            && self.album_art_draw_transform.is_some()
+            && let Some(album_art) = &self.album_art
+            && let Some(draw_transform) = &self.album_art_draw_transform
         {
             canvas.draw(
-                self.album_art.as_ref().unwrap(),
+                album_art,
                 DrawParam {
-                    transform: self.album_art_draw_transform.unwrap(),
+                    transform: *draw_transform,
                     ..Default::default()
                 },
             );
@@ -1074,29 +1087,14 @@ impl EventHandler for MPDDisplay {
         canvas.finish(ctx)
     }
 
-    fn text_input_event(&mut self, _ctx: &mut Context, character: char) -> Result<(), GameError> {
-        if !self.is_initialized && self.opts.enable_prompt_password && !character.is_control() {
-            if self.opts.password.is_none() {
-                let s = String::from(character);
-                self.opts.password = Some(s);
-                self.notice_text.add('*');
-            } else {
-                self.opts.password.as_mut().unwrap().push(character);
-                self.notice_text.add('*');
-            }
-        }
-
-        Ok(())
-    }
-
     fn key_down_event(
         &mut self,
-        _ctx: &mut Context,
+        ctx: &mut Context,
         input: KeyInput,
         _repeat: bool,
     ) -> Result<(), GameError> {
         if !self.is_initialized && self.opts.enable_prompt_password {
-            if input.keycode == Some(keyboard::KeyCode::Back) {
+            if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::Backspace) {
                 let s: String = self.notice_text.contents();
 
                 if s.ends_with('*') {
@@ -1106,18 +1104,34 @@ impl EventHandler for MPDDisplay {
                 if let Some(input_p) = &mut self.opts.password {
                     input_p.pop();
                 }
-            } else if input.keycode == Some(keyboard::KeyCode::Return) {
+            } else if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::Enter) {
                 self.password_entered = true;
+            } else if let Some(input_k) = input.event.text {
+                if self.opts.password.is_none() {
+                    let s: String = input_k.to_string();
+                    self.opts.password = Some(s);
+                    self.notice_text.add("*");
+                } else {
+                    let c_opt: Result<char, _> = input_k.parse();
+                    if let Ok(c) = c_opt
+                        && let Some(pw) = &mut self.opts.password
+                    {
+                        pw.push(c);
+                        self.notice_text.add('*');
+                    }
+                }
             }
-        } else if input.keycode == Some(keyboard::KeyCode::H) {
+        } else if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::KeyH) {
             self.hide_text = true;
+        } else if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::Escape) {
+            ctx.request_quit();
         }
 
         Ok(())
     }
 
     fn key_up_event(&mut self, _ctx: &mut Context, input: KeyInput) -> Result<(), GameError> {
-        if input.keycode == Some(keyboard::KeyCode::H) {
+        if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::KeyH) {
             self.hide_text = false;
         }
 
@@ -1133,6 +1147,7 @@ impl EventHandler for MPDDisplay {
         self.get_album_art_transform(ctx, !self.opts.do_not_fill_scale_album_art);
         self.refresh_text_transforms(ctx)
             .expect("Failed to set text transforms");
+        self.resize_ticks = 0;
 
         Ok(())
     }
