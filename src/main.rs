@@ -7,18 +7,12 @@ mod unicode_support;
 
 use clap::Parser;
 use ggez::conf::{WindowMode, WindowSetup};
-use ggez::event::winit_event::{ElementState, KeyboardInput, ModifiersState};
-use ggez::event::{self, ControlFlow, EventHandler};
-use ggez::input::keyboard::{self, KeyInput};
-use ggez::{ContextBuilder, GameError};
+use ggez::event;
+use ggez::{ContextBuilder, GameResult};
 use std::fs::File;
 use std::io::Read;
 use std::net::Ipv4Addr;
 use std::path::PathBuf;
-use std::thread;
-use std::time::{Duration, Instant};
-
-use debug_log::log;
 
 #[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
@@ -63,7 +57,7 @@ pub struct Opt {
     text_bg_opacity: u8,
 }
 
-fn main() -> Result<(), String> {
+fn main() -> GameResult<()> {
     let mut opt = Opt::parse();
     if let Some(forced_scale) = &mut opt.force_text_height_scale {
         if *forced_scale < 0.01 {
@@ -75,8 +69,6 @@ fn main() -> Result<(), String> {
         }
     }
     println!("Got host addr == {}, port == {}", opt.host, opt.port);
-
-    let password_opted = opt.password_file.is_some() || opt.enable_prompt_password;
 
     // Read password from file if exists, error otherwise.
     if let Some(psswd_file_path) = opt.password_file.as_ref() {
@@ -121,109 +113,7 @@ fn main() -> Result<(), String> {
     // mount "/" read-only so that fonts can be loaded via absolute paths
     ctx.fs.mount(&PathBuf::from("/"), true);
 
-    let mut display = display::MPDDisplay::new(&mut ctx, opt.clone());
+    let display = display::MPDDisplay::new(&mut ctx, opt.clone());
 
-    let mut modifiers_state: ModifiersState = ModifiersState::default();
-
-    let mut close_request_handled = false;
-
-    event_loop.run(move |mut event, _window_target, control_flow| {
-        if !ctx.continuing
-            || ctx.quit_requested
-            || ((!password_opted || display.is_authenticated())
-                && display.get_is_mpd_handler_stopped().unwrap_or(false))
-            || signal::TO_CLOSE_REQUESTED.load(std::sync::atomic::Ordering::Relaxed)
-        {
-            if !close_request_handled {
-                *control_flow = ControlFlow::Exit;
-                close_request_handled = true;
-                return;
-            }
-        }
-
-        *control_flow = ControlFlow::WaitUntil(Instant::now() + Duration::from_millis(100));
-
-        let ctx = &mut ctx;
-
-        event::process_event(ctx, &mut event);
-        match event {
-            event::winit_event::Event::WindowEvent { event, .. } => match event {
-                event::winit_event::WindowEvent::CloseRequested => ctx.request_quit(),
-                event::winit_event::WindowEvent::ModifiersChanged(state) => {
-                    modifiers_state = state;
-                }
-                event::winit_event::WindowEvent::KeyboardInput {
-                    device_id: _,
-                    input:
-                        KeyboardInput {
-                            virtual_keycode: Some(keycode),
-                            state,
-                            ..
-                        },
-                    is_synthetic: _,
-                } => {
-                    if keycode == keyboard::KeyCode::Escape {
-                        *control_flow = ControlFlow::Exit;
-                        return;
-                    }
-                    let ki = KeyInput {
-                        scancode: 0,
-                        keycode: Some(keycode),
-                        mods: From::from(modifiers_state),
-                    };
-                    if state == ElementState::Pressed {
-                        display.key_down_event(ctx, ki, false).ok();
-                    } else {
-                        display.key_up_event(ctx, ki).ok();
-                    }
-                }
-                event::winit_event::WindowEvent::Resized(phys_size) => {
-                    display
-                        .resize_event(ctx, phys_size.width as f32, phys_size.height as f32)
-                        .ok();
-                }
-                event::winit_event::WindowEvent::ReceivedCharacter(ch) => {
-                    display.text_input_event(ctx, ch).ok();
-                }
-                x => log(
-                    format!("Other window event fired: {x:?}"),
-                    debug_log::LogState::Verbose,
-                    opt.log_level,
-                ),
-            },
-            event::winit_event::Event::MainEventsCleared => {
-                ctx.time.tick();
-
-                let mut game_result: Result<(), GameError> = display.update(ctx);
-                if game_result.is_err() {
-                    println!("Error update: {}", game_result.unwrap_err());
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-
-                ctx.gfx.begin_frame().unwrap();
-                game_result = display.draw(ctx);
-                if game_result.is_err() {
-                    println!("Error draw: {}", game_result.unwrap_err());
-                    *control_flow = ControlFlow::Exit;
-                    return;
-                }
-                ctx.gfx.end_frame().unwrap();
-
-                ctx.mouse.reset_delta();
-
-                // sleep to force ~5 fps
-                thread::sleep(Duration::from_millis(200));
-                ggez::timer::yield_now();
-            }
-            event::winit_event::Event::LoopDestroyed => {
-                eprintln!("End of mpd_info_screen main loop.")
-            }
-            x => log(
-                format!("Device event fired: {x:?}"),
-                debug_log::LogState::Verbose,
-                opt.log_level,
-            ),
-        }
-    });
+    event::run(ctx, event_loop, display)
 }

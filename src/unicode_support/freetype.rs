@@ -3,8 +3,8 @@ use std::path::Path;
 mod ffi {
     use freetype::freetype::{
         FT_Done_Face, FT_Done_FreeType, FT_Face, FT_FaceRec_, FT_Get_Char_Index, FT_Init_FreeType,
-        FT_Library, FT_ModuleRec_, FT_Open_Args, FT_Open_Face, FT_Parameter_, FT_StreamRec_,
-        FT_OPEN_PATHNAME,
+        FT_Library, FT_ModuleRec_, FT_OPEN_PATHNAME, FT_Open_Args, FT_Open_Face, FT_Parameter_,
+        FT_StreamRec_,
     };
     use std::ffi::CString;
     use std::path::Path;

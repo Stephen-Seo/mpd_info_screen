@@ -64,7 +64,9 @@ mod ffi {
                 if result != bindgen::_FcResult_FcResultMatch {
                     if !result_pattern.is_null() {
                         bindgen::FcPatternDestroy(result_pattern);
-                        return Err(String::from("Failed to FcFontMatch (FcResult is not FcResultMatch; result_pattern is not null)"));
+                        return Err(String::from(
+                            "Failed to FcFontMatch (FcResult is not FcResultMatch; result_pattern is not null)",
+                        ));
                     } else {
                         return Err(format!(
                             "Failed to FcFontMatch (FcResult is not FcResultMatch; {result:?})"
