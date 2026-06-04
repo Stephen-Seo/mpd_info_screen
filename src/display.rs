@@ -1001,7 +1001,6 @@ impl EventHandler for MPDDisplay {
         } else {
             // sleep to force ~5 fps
             thread::sleep(Duration::from_millis(200));
-            ggez::timer::yield_now();
         }
 
         Ok(())
@@ -1107,18 +1106,16 @@ impl EventHandler for MPDDisplay {
             } else if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::Enter) {
                 self.password_entered = true;
             } else if let Some(input_k) = input.event.text {
-                if self.opts.password.is_none() {
-                    let s: String = input_k.to_string();
-                    self.opts.password = Some(s);
-                    self.notice_text.add("*");
-                } else {
+                if let Some(pw) = &mut self.opts.password {
                     let c_opt: Result<char, _> = input_k.parse();
-                    if let Ok(c) = c_opt
-                        && let Some(pw) = &mut self.opts.password
-                    {
+                    if let Ok(c) = c_opt {
                         pw.push(c);
                         self.notice_text.add('*');
                     }
+                } else {
+                    let s: String = input_k.to_string();
+                    self.opts.password = Some(s);
+                    self.notice_text.add("*");
                 }
             }
         } else if input.event.physical_key == PhysicalKey::Code(keyboard::KeyCode::KeyH) {
