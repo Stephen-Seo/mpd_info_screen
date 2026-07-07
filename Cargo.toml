@@ -13,7 +13,7 @@ resolver = "2"
 clap = { version = "4.6", features = ["derive"] }
 image = "0.25"
 ggez = "0.10"
-freetype = { version = "0.7", optional = true }
+freetype = { version = "0.8", optional = true }
 wgpu-types = "29.0.1"
 
 #[target.'cfg(windows)'.dependencies]
