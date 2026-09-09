@@ -22,7 +22,7 @@ wgpu-types = "29.0.1"
 libc = "0.2"
 
 [build-dependencies]
-bindgen = { version = "0.72", optional = true }
+bindgen = { version = "0.73", optional = true }
 
 [features]
 unicode_support = ["dep:freetype", "dep:bindgen"]
