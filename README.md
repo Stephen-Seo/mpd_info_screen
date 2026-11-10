@@ -24,7 +24,10 @@ For now, both programs will be maintained.
 
 ## Known Bugs ❗❗
 
-Currently there are no known bugs. Please report any bugs you find to the
+[Currently, the Rust crate `zip` needs to be updated, but is a sub-dependency
+and cannot be directly updated immediately.](https://github.com/Stephen-Seo/mpd_info_screen/issues/38)
+
+Please report any bugs you find to the
 [issue tracker](https://github.com/Stephen-Seo/mpd_info_screen/issues).
 
 ## Unicode Support
