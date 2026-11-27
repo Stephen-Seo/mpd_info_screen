@@ -14,7 +14,7 @@ clap = { version = "4.6", features = ["derive"] }
 image = "0.25"
 ggez = "0.10"
 freetype = { version = "0.8", optional = true }
-wgpu-types = "29.0.1"
+wgpu-types = "29.0.4"
 
 #[target.'cfg(windows)'.dependencies]
 
